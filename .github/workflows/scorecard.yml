@@ -1,0 +1,26 @@
+name: OpenSSF Scorecard
+on:
+  branch_protection_rule:
+  schedule:
+    - cron: '17 3 * * 1'
+  push:
+    branches: [main]
+permissions: read-all
+jobs:
+  analysis:
+    name: Scorecard analysis
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with: { persist-credentials: false }
+      - uses: ossf/scorecard-action@e8e61e86ea0a152be84d03729c02a7300065c17d # v2
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          publish_results: true
+      - uses: github/codeql-action/upload-sarif@61817fadad823920a8924645dd5f67985d6a1d94 # v3
+        with: { sarif_file: results.sarif }
