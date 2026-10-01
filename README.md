@@ -45,7 +45,7 @@ jobs:
 For high-assurance workflows, pin the immutable commit that backs the release:
 
 ```yaml
-- uses: efegokdemir/shopify-app-review-guard@<FULL-V0.1.1-SHA> # v0.1.1
+- uses: efegokdemir/shopify-app-review-guard@e748da93a28c59f79adcf2d1c476f16c8d8210dd # v0.1.1
 ```
 
 A release tag is easier to read but movable; a SHA is the immutable reference reviewed by your team.
