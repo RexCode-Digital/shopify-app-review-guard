@@ -63,6 +63,8 @@ Rules are intentionally high precision and conservative. The result model distin
 - lightweight listing manifest and manual-check tracking
 - JSON and SARIF 2.1.0 output with stable rule IDs
 
+## Related tools
+
 This complements, rather than duplicates, the other RexCode tools:
 
 - [ChangeGuard](https://github.com/efegokdemir/shopify-app-changeguard) reviews meaningful configuration changes.
@@ -98,6 +100,8 @@ npm run typecheck
 npm run build
 npm pack --dry-run
 ```
+
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for the project workflow and [open issues](https://github.com/efegokdemir/shopify-app-review-guard/issues) for current work.
 
 ## Security and license
 
