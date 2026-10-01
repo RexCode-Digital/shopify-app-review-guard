@@ -72,6 +72,8 @@ This complements, rather than duplicates, the other RexCode tools:
 - [Upgrade Guard](https://github.com/efegokdemir/shopify-upgrade-guard) detects API and platform migration risks.
 - App Review Guard preflights App Store and production-readiness requirements.
 
+GitHub Marketplace: [Shopify App Review Guard](https://github.com/marketplace/actions/shopify-app-review-guard)
+
 ## Listing manifest
 
 External listing and Partner Dashboard requirements cannot be proven from source. An optional `.app-review-guard.yml` records which items still need human verification. Unchecked values become `NEEDS_REVIEW`, never `FAIL`.
