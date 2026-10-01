@@ -1,0 +1,25 @@
+name: Shopify App Review Guard
+description: Run deterministic offline preflight checks for Shopify App Store and production readiness.
+author: efegokdemir
+branding:
+  icon: shield
+  color: green
+inputs:
+  path: { description: Repository path to scan, required: false, default: '.' }
+  config: { description: Reserved for future explicit configuration selection, required: false }
+  fail-on: { description: Minimum severity that fails the job, required: false, default: high }
+  format: { description: human, json, or sarif, required: false, default: human }
+  strict: { description: Treat review findings at the threshold as failures, required: false, default: 'false' }
+  show-unmapped: { description: Include unknown Shopify patterns, required: false, default: 'false' }
+outputs:
+  outcome: { description: Policy outcome }
+  finding-count: { description: Total findings }
+  fail-count: { description: Fail findings }
+  warning-count: { description: Warning findings }
+  review-count: { description: Manual-review findings }
+  unknown-count: { description: Unknown findings }
+  report: { description: Rendered report }
+  rule-ids: { description: Comma-separated rule IDs }
+runs:
+  using: node20
+  main: dist/index.js
