@@ -22,7 +22,7 @@ function walk(root) {
   function visit(dir) {
     let entries; try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
     for (const e of entries) {
-      if (SKIP.has(e.name) || e.name.startsWith('.')) continue;
+      if (SKIP.has(e.name) || (e.isDirectory() && e.name.startsWith('.'))) continue;
       const p = path.join(dir, e.name);
       if (e.isDirectory()) visit(p); else if (/\.(?:[cm]?[jt]sx?|json|toml|ya?ml|md|env|txt|graphql)$/i.test(e.name)) out.push(p);
     }
@@ -52,7 +52,7 @@ function manifest(root) {
 function manual(ruleId, title, rationale, remediation, file = '.app-review-guard.yml') { return finding(ruleId, 'medium', 'NEEDS_REVIEW', title, rationale, remediation, file, undefined, 'manual', source.submit); }
 
 export function analyze(root = '.', options = {}) {
-  const repo = path.resolve(root); const files = readFiles(repo); const cs = configs(files); const findings = [];
+  const repo = path.resolve(root); const files = readFiles(repo); const cs = configs(files).filter(f => !options.config || path.normalize(f.file) === path.normalize(options.config)); const findings = [];
   if (!cs.length) findings.push(finding('AR-CONFIG-001', 'high', 'FAIL', 'Shopify app configuration was not found', 'No shopify.app*.toml file was discovered.', 'Add and validate the Shopify CLI app configuration for the intended deployment.', 'repository', undefined, 'high'));
   for (const c of cs) {
     const t = c.text; const url = configValue(t, 'application_url');
