@@ -36,8 +36,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
-      # Readable release tag; movable and convenient for low-assurance workflows.
-      - uses: efegokdemir/shopify-app-review-guard@v0.1.0
+      # Readable patch release tag; movable and convenient for low-assurance workflows.
+      - uses: efegokdemir/shopify-app-review-guard@v0.1.1
         with:
           fail-on: high
 ```
@@ -45,7 +45,7 @@ jobs:
 For high-assurance workflows, pin the immutable commit that backs the release:
 
 ```yaml
-- uses: efegokdemir/shopify-app-review-guard@6603aad4f9374105fc4f94eaa5d982d61b31c596 # v0.1.0
+- uses: efegokdemir/shopify-app-review-guard@<FULL-V0.1.1-SHA> # v0.1.1
 ```
 
 A release tag is easier to read but movable; a SHA is the immutable reference reviewed by your team.

@@ -89,5 +89,5 @@ export function analyze(root = '.', options = {}) {
   if (options.showUnmapped && files.some(f => /shopify/i.test(f.text))) findings.push(finding('AR-REVIEW-001', 'low', 'UNKNOWN', 'Some Shopify behaviour may be outside supported static patterns', 'Static analysis cannot understand every framework abstraction or runtime path.', 'Review UNKNOWN/NEEDS_REVIEW items and use runtime testing before submission.', 'repository', undefined, 'low', source.submit));
   findings.sort((a, b) => `${a.ruleId}:${a.file}`.localeCompare(`${b.ruleId}:${b.file}`));
   const counts = Object.fromEntries(['PASS', 'FAIL', 'WARN', 'NEEDS_REVIEW', 'UNKNOWN', 'SKIPPED'].map(s => [s, findings.filter(f => f.status === s).length]));
-  return { toolVersion: '0.1.0', evidenceVersion: EVIDENCE_VERSION, target: 'Shopify App Store / production readiness', root: repo, summary: { ...counts, findingCount: findings.length }, findings, manualChecks: findings.filter(f => f.status === 'NEEDS_REVIEW').map(f => f.ruleId), skipped: [] };
+  return { toolVersion: '0.1.1', evidenceVersion: EVIDENCE_VERSION, target: 'Shopify App Store / production readiness', root: repo, summary: { ...counts, findingCount: findings.length }, findings, manualChecks: findings.filter(f => f.status === 'NEEDS_REVIEW').map(f => f.ruleId), skipped: [] };
 }

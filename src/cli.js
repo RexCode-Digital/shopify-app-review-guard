@@ -4,7 +4,7 @@ import { analyze } from './analyzer.js';
 import { human, sarif, shouldFail } from './output.js';
 const args = process.argv.slice(2); const command = args[0] && !args[0].startsWith('-') ? args.shift() : 'check';
 function value(name, fallback) { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : fallback; }
-if (args.includes('--version') || command === '--version' || command === '-v') { console.log('0.1.0'); process.exit(0); }
+if (args.includes('--version') || command === '--version' || command === '-v') { console.log('0.1.1'); process.exit(0); }
 if (command === 'rules') { console.log('AR-CONFIG-* AR-COMPLIANCE-* AR-WEBHOOK-* AR-AUTH-* AR-SECURITY-* AR-API-* AR-BILLING-* AR-DATA-* AR-LISTING-* AR-REVIEW-*'); process.exit(0); }
 if (command === 'explain') { console.log('Use the rule reference: https://github.com/efegokdemir/shopify-app-review-guard/blob/main/docs/rule-reference.md'); process.exit(0); }
 if (command !== 'check') { console.error(`Unknown command: ${command}`); process.exit(2); }
