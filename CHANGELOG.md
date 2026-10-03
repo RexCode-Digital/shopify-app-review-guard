@@ -2,6 +2,8 @@
 
 ## 0.1.2
 
+- Declare Node 24 for the GitHub Action, matching current runner support; CLI engines remain Node >=20.
+
 - Parse actual TOML and validate config types, URLs, and compliance subscriptions.
 - Do not allow documentation or incomplete listing manifests to satisfy implementation checks.
 - Include environment-file variants, reject file/config/manifest symlinks, and bound file analysis.
