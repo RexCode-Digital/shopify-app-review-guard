@@ -38,8 +38,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # Current patch release; resolve to an immutable SHA below.
-      - uses: efegokdemir/shopify-app-review-guard@v0.1.2
+      - uses: efegokdemir/shopify-app-review-guard@83881ee8dd8428f56850b657ef01f1c30951da19 # v0.1.2
         with:
           fail-on: high
 ```
@@ -129,7 +128,7 @@ Report vulnerabilities privately using [SECURITY.md](SECURITY.md). Never include
 
 ## Immutable SHA usage
 
-Resolve the release commit, review it, and replace `@v0.1.2` in the Action example with that full SHA:
+The Action example pins the reviewed v0.1.2 release commit. Verify the release reference with:
 
 ```bash
 gh api repos/efegokdemir/shopify-app-review-guard/git/ref/tags/v0.1.2 --jq .object.sha
