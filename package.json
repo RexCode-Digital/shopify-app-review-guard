@@ -1,26 +1,65 @@
 {
   "name": "shopify-app-review-guard",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Offline, deterministic preflight checks for Shopify App Store and production readiness.",
   "type": "module",
-  "engines": { "node": ">=20" },
-  "bin": { "shopify-app-review-guard": "src/cli.js" },
-  "files": ["src", "action.yml", "dist", "docs", "README.md", "LICENSE", "CHANGELOG.md", "SECURITY.md"],
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "shopify-app-review-guard": "src/cli.js"
+  },
+  "files": [
+    "src",
+    "action.yml",
+    "dist",
+    "docs",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md",
+    "SECURITY.md"
+  ],
   "scripts": {
     "test": "node --test",
-    "coverage": "node --test --experimental-test-coverage",
-    "lint": "node --check src/cli.js && node --check src/analyzer.js && node --check src/output.js && node --check src/action.js",
+    "coverage": "c8 --include 'src/**' --reporter=text --reporter=json-summary node --test",
+    "lint": "node scripts/check-source.mjs",
     "typecheck": "node --check src/analyzer.js",
     "build": "node scripts/build-action.mjs",
     "check": "node src/cli.js check --format human --fail-on none",
-    "package:smoke": "npm pack --dry-run",
-    "audit": "npm audit --omit=dev --audit-level=high"
+    "package:smoke": "node scripts/package-smoke.mjs",
+    "audit": "npm audit --omit=dev --audit-level=high",
+    "action:check": "node scripts/check-action.mjs",
+    "prebuild": "node scripts/write-version.mjs"
   },
-  "repository": { "type": "git", "url": "git+https://github.com/efegokdemir/shopify-app-review-guard.git" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/efegokdemir/shopify-app-review-guard.git"
+  },
   "homepage": "https://github.com/efegokdemir/shopify-app-review-guard",
-  "bugs": { "url": "https://github.com/efegokdemir/shopify-app-review-guard/issues" },
+  "bugs": {
+    "url": "https://github.com/efegokdemir/shopify-app-review-guard/issues"
+  },
   "license": "MIT",
-  "keywords": ["shopify", "shopify-app", "app-review", "static-analysis", "security", "compliance", "webhooks", "github-action", "npm"],
-  "author": "Efe Gökdemir",
-  "publishConfig": { "provenance": true }
+  "keywords": [
+    "shopify",
+    "shopify-app",
+    "app-review",
+    "static-analysis",
+    "security",
+    "compliance",
+    "webhooks",
+    "github-action",
+    "npm"
+  ],
+  "author": "Efe G\u00f6kdemir",
+  "publishConfig": {
+    "provenance": true
+  },
+  "dependencies": {
+    "@iarna/toml": "2.2.5"
+  },
+  "devDependencies": {
+    "c8": "12.0.0",
+    "esbuild": "^0.28.2"
+  }
 }
