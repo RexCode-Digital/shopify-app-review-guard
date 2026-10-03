@@ -37,7 +37,7 @@ jobs:
   review-guard:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # Current patch release; resolve to an immutable SHA below.
       - uses: efegokdemir/shopify-app-review-guard@v0.1.2
         with:
@@ -84,7 +84,7 @@ npx shopify-app-review-guard --help
 
 `--config` selects a TOML file relative to `--path`. `--fail-on` accepts `none`, `low`, `medium`, or `high`; `--strict` includes `NEEDS_REVIEW` findings at that threshold. Unknown flags, malformed configuration, and invalid policies exit 2. TOML comments and strings in unrelated tables do not satisfy configured compliance subscriptions.
 
-The Action supports `path`, `config`, `format`, `fail-on`, `strict`, and `show-unmapped`. Outputs are `outcome`, `finding-count`, `fail-count`, `warning-count`, `review-count`, `unknown-count`, `report`, and `rule-ids`. `report` is the rendered multiline report, usable as JSON when `format: json`. The bundled Action runs on Node 20 without installing dependencies in the consumer job.
+The Action supports `path`, `config`, `format`, `fail-on`, `strict`, and `show-unmapped`. Outputs are `outcome`, `finding-count`, `fail-count`, `warning-count`, `review-count`, `unknown-count`, `report`, and `rule-ids`. `report` is the rendered multiline report, usable as JSON when `format: json`. The bundled Action runs on Node 24 without installing dependencies in the consumer job.
 
 ## Output and scan limits
 
