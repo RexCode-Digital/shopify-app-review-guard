@@ -6,7 +6,7 @@ branding:
   color: green
 inputs:
   path: { description: Repository path to scan, required: false, default: '.' }
-  config: { description: Reserved for future explicit configuration selection, required: false }
+  config: { description: Shopify app TOML path relative to the scan root, required: false }
   fail-on: { description: Minimum severity that fails the job, required: false, default: high }
   format: { description: human, json, or sarif, required: false, default: human }
   strict: { description: Treat review findings at the threshold as failures, required: false, default: 'false' }

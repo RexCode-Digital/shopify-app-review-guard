@@ -1,10 +1,19 @@
 # Changelog
 
+## 0.1.2
+
+- Parse actual TOML and validate config types, URLs, and compliance subscriptions.
+- Do not allow documentation or incomplete listing manifests to satisfy implementation checks.
+- Include environment-file variants, reject file/config/manifest symlinks, and bound file analysis.
+- Validate CLI/Action policies and write multiline JSON outputs safely.
+- Ship and independently test a self-contained Action bundle; preserve historical v0.1.0 and corrected v0.1.1 releases.
+- Validate clean installs and source-only coverage on supported Node versions.
+
 ## 0.1.1
 
 - Fixed the GitHub Action distribution entrypoint so the Action loads its source modules correctly from `dist/index.js`.
 - Added conservative scanner regression coverage for configuration selection, severity policies, environment files, empty repositories, and symlink safety.
-- This is the recommended release. The historical `v0.1.0` release remains unchanged and is not recommended.
+- This corrected the early release. The historical `v0.1.0` release remains unchanged and is not recommended.
 
 ## 0.1.0
 

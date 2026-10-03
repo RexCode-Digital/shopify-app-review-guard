@@ -5,13 +5,17 @@ on:
   schedule:
     - cron: '23 4 * * 1'
 permissions:
-  security-events: write
   contents: read
 jobs:
   analyze:
+    permissions:
+      contents: read
+      security-events: write
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
       - uses: github/codeql-action/init@61817fadad823920a8924645dd5f67985d6a1d94 # v3
-        with: { languages: javascript }
+        with:
+          languages: javascript
+          config-file: ./.github/codeql-config.yml
       - uses: github/codeql-action/analyze@61817fadad823920a8924645dd5f67985d6a1d94 # v3
