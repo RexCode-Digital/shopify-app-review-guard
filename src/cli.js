@@ -10,7 +10,7 @@ if (args.includes('--version') || args.includes('-v')) { console.log(TOOL_VERSIO
 const command = args[0] && !args[0].startsWith('-') ? args.shift() : 'check';
 try {
   if (command === 'rules') { console.log('AR-CONFIG-* AR-COMPLIANCE-* AR-WEBHOOK-* AR-AUTH-* AR-SECURITY-* AR-API-* AR-BILLING-* AR-DATA-* AR-LISTING-* AR-REVIEW-*'); process.exit(0); }
-  if (command === 'explain') { console.log('Rule reference: https://github.com/efegokdemir/shopify-app-review-guard/blob/main/docs/rule-reference.md'); process.exit(0); }
+  if (command === 'explain') { console.log('Rule reference: https://github.com/RexCode-Digital/shopify-app-review-guard/blob/main/docs/rule-reference.md'); process.exit(0); }
   if (command !== 'check') throw new Error(`Unknown command: ${command}`);
   const options = {};
   for (let i = 0; i < args.length; i++) {

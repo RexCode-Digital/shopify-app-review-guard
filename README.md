@@ -3,15 +3,17 @@
 **Preflight Shopify App Store and production-readiness risks before submission.**
 
 [![npm](https://img.shields.io/npm/v/shopify-app-review-guard?logo=npm)](https://www.npmjs.com/package/shopify-app-review-guard)
-[![CI](https://github.com/efegokdemir/shopify-app-review-guard/actions/workflows/ci.yml/badge.svg)](https://github.com/efegokdemir/shopify-app-review-guard/actions/workflows/ci.yml)
-[![CodeQL](https://github.com/efegokdemir/shopify-app-review-guard/actions/workflows/codeql.yml/badge.svg)](https://github.com/efegokdemir/shopify-app-review-guard/actions/workflows/codeql.yml)
-[![license](https://img.shields.io/github/license/efegokdemir/shopify-app-review-guard)](LICENSE)
+[![CI](https://github.com/RexCode-Digital/shopify-app-review-guard/actions/workflows/ci.yml/badge.svg)](https://github.com/RexCode-Digital/shopify-app-review-guard/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/RexCode-Digital/shopify-app-review-guard/actions/workflows/codeql.yml/badge.svg)](https://github.com/RexCode-Digital/shopify-app-review-guard/actions/workflows/codeql.yml)
+[![license](https://img.shields.io/github/license/RexCode-Digital/shopify-app-review-guard)](LICENSE)
 
 Shopify App Review Guard is an offline, deterministic, read-only CLI and GitHub Action. It checks repository evidence for configuration, compliance webhooks, webhook security, authentication, credentials, protected-data signals, billing, API usage, and listing items that need Partner Dashboard verification.
 
 No Shopify credentials. No telemetry. No source upload. No repository code execution. No AI API. Unofficial open-source tooling; not affiliated with or endorsed by Shopify.
 
-Part of the **RexCode Shopify developer tools** suite. Requires Node.js 20 or later for the CLI. [Releases](https://github.com/efegokdemir/shopify-app-review-guard/releases) · [npm](https://www.npmjs.com/package/shopify-app-review-guard) · [Marketplace](https://github.com/marketplace/actions/shopify-app-review-guard)
+Maintained by RexCode Digital Ltd.
+
+Part of the **RexCode Shopify developer tools** suite. Requires Node.js 20 or later for the CLI. [Releases](https://github.com/RexCode-Digital/shopify-app-review-guard/releases) · [npm](https://www.npmjs.com/package/shopify-app-review-guard) · [Marketplace](https://github.com/marketplace/actions/shopify-app-review-guard)
 
 ## Quick start
 
@@ -38,7 +40,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: efegokdemir/shopify-app-review-guard@83881ee8dd8428f56850b657ef01f1c30951da19 # v0.1.2
+      - uses: RexCode-Digital/shopify-app-review-guard@83881ee8dd8428f56850b657ef01f1c30951da19 # v0.1.2
         with:
           fail-on: high
 ```
@@ -60,9 +62,9 @@ Rules report deterministic signals with explicit confidence. Repository-wide heu
 
 This complements, rather than duplicates, the other RexCode tools:
 
-- [ChangeGuard](https://github.com/efegokdemir/shopify-app-changeguard) reviews meaningful configuration changes.
-- [Scope Guard](https://github.com/efegokdemir/shopify-scope-guard) audits declared access scopes against repository evidence.
-- [Upgrade Guard](https://github.com/efegokdemir/shopify-upgrade-guard) detects API and platform migration risks.
+- [ChangeGuard](https://github.com/RexCode-Digital/shopify-app-changeguard) reviews meaningful configuration changes.
+- [Scope Guard](https://github.com/RexCode-Digital/shopify-scope-guard) audits declared access scopes against repository evidence.
+- [Upgrade Guard](https://github.com/RexCode-Digital/shopify-upgrade-guard) detects API and platform migration risks.
 - App Review Guard preflights App Store and production-readiness requirements.
 
 GitHub Marketplace: [Shopify App Review Guard](https://github.com/marketplace/actions/shopify-app-review-guard)
@@ -120,7 +122,7 @@ npm run build
 npm pack --dry-run
 ```
 
-Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for the project workflow and [open issues](https://github.com/efegokdemir/shopify-app-review-guard/issues) for current work.
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for the project workflow and [open issues](https://github.com/RexCode-Digital/shopify-app-review-guard/issues) for current work.
 
 ## Security and license
 
@@ -131,7 +133,7 @@ Report vulnerabilities privately using [SECURITY.md](SECURITY.md). Never include
 The Action example pins the reviewed v0.1.2 release commit. Verify the release reference with:
 
 ```bash
-gh api repos/efegokdemir/shopify-app-review-guard/git/ref/tags/v0.1.2 --jq .object.sha
+gh api repos/RexCode-Digital/shopify-app-review-guard/git/ref/tags/v0.1.2 --jq .object.sha
 ```
 
 Published patch tags are retained; existing minor aliases are movable. A reviewed full commit SHA is the immutable execution reference.

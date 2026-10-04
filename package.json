@@ -33,11 +33,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/efegokdemir/shopify-app-review-guard.git"
+    "url": "https://github.com/RexCode-Digital/shopify-app-review-guard.git"
   },
-  "homepage": "https://github.com/efegokdemir/shopify-app-review-guard",
+  "homepage": "https://github.com/RexCode-Digital/shopify-app-review-guard#readme",
   "bugs": {
-    "url": "https://github.com/efegokdemir/shopify-app-review-guard/issues"
+    "url": "https://github.com/RexCode-Digital/shopify-app-review-guard/issues"
   },
   "license": "MIT",
   "keywords": [
@@ -51,7 +51,7 @@
     "github-action",
     "npm"
   ],
-  "author": "Efe G\u00f6kdemir",
+  "author": "Efe Gökdemir",
   "publishConfig": {
     "provenance": true
   },

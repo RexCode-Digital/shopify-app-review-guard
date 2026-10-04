@@ -2247,7 +2247,7 @@ Static analysis found ${s.NEEDS_REVIEW} item(s) requiring manual verification. T
   return out;
 }
 function sarif(report) {
-  return { version: "2.1.0", $schema: "https://json.schemastore.org/sarif-2.1.0.json", runs: [{ tool: { driver: { name: "Shopify App Review Guard", version: report.toolVersion, informationUri: "https://github.com/efegokdemir/shopify-app-review-guard", rules: [...new Map(report.findings.map((f) => [f.ruleId, { id: f.ruleId, name: f.title, helpUri: f.evidence }])).values()] } }, results: report.findings.map((f) => ({ ruleId: f.ruleId, level: f.status === "FAIL" ? "error" : f.status === "WARN" ? "warning" : "note", message: { text: `${f.title} ${f.rationale}` }, locations: [{ physicalLocation: { artifactLocation: { uri: f.file.split("/").map(encodeURIComponent).join("/") }, ...f.line ? { region: { startLine: f.line } } : {} } }] })) }] };
+  return { version: "2.1.0", $schema: "https://json.schemastore.org/sarif-2.1.0.json", runs: [{ tool: { driver: { name: "Shopify App Review Guard", version: report.toolVersion, informationUri: "https://github.com/RexCode-Digital/shopify-app-review-guard", rules: [...new Map(report.findings.map((f) => [f.ruleId, { id: f.ruleId, name: f.title, helpUri: f.evidence }])).values()] } }, results: report.findings.map((f) => ({ ruleId: f.ruleId, level: f.status === "FAIL" ? "error" : f.status === "WARN" ? "warning" : "note", message: { text: `${f.title} ${f.rationale}` }, locations: [{ physicalLocation: { artifactLocation: { uri: f.file.split("/").map(encodeURIComponent).join("/") }, ...f.line ? { region: { startLine: f.line } } : {} } }] })) }] };
 }
 
 // src/action.js
