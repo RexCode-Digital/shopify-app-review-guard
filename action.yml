@@ -1,6 +1,6 @@
 name: Shopify App Review Guard
 description: Run deterministic offline preflight checks for Shopify App Store and production readiness.
-author: efegokdemir
+author: RexCode Digital Ltd (Efe Gökdemir)
 branding:
   icon: shield
   color: green
