@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.3
+
+- Refresh published npm metadata to the canonical RexCode-Digital repository and issue tracker.
+- Preserve the existing package name, license, author attribution, and runtime behavior.
+
 ## 0.1.2
 
 - Declare Node 24 for the GitHub Action, matching current runner support; CLI engines remain Node >=20.
