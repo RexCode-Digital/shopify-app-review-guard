@@ -1,7 +1,7 @@
 {
   "name": "shopify-app-review-guard",
-  "version": "0.1.3",
-  "description": "Offline, deterministic preflight checks for Shopify App Store and production readiness.",
+  "version": "0.1.4",
+  "description": "Run offline Shopify App Store review-readiness checks against app configuration and repository evidence.",
   "type": "module",
   "engines": {
     "node": ">=20"
@@ -44,13 +44,12 @@
   "keywords": [
     "shopify",
     "shopify-app",
+    "shopify-app-store",
     "app-review",
-    "static-analysis",
-    "security",
-    "compliance",
-    "webhooks",
-    "github-action",
-    "npm"
+    "review-readiness",
+    "validation",
+    "github-actions",
+    "ci"
   ],
   "author": "Efe Gökdemir",
   "publishConfig": {

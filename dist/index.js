@@ -2031,7 +2031,7 @@ var require_toml = __commonJS({
 });
 
 // src/version.js
-var TOOL_VERSION = "0.1.3";
+var TOOL_VERSION = "0.1.4";
 
 // src/analyzer.js
 var import_toml = __toESM(require_toml(), 1);

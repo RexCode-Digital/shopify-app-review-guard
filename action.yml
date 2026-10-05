@@ -1,5 +1,5 @@
 name: Shopify App Review Guard
-description: Run deterministic offline preflight checks for Shopify App Store and production readiness.
+description: Run offline Shopify App Store review-readiness checks against repository evidence in CI.
 author: RexCode Digital Ltd (Efe Gökdemir)
 branding:
   icon: shield
