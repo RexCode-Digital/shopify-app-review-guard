@@ -40,7 +40,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: RexCode-Digital/shopify-app-review-guard@83881ee8dd8428f56850b657ef01f1c30951da19 # v0.1.2
+      - uses: RexCode-Digital/shopify-app-review-guard@4db0319d82f360e177241a9d002a1bd76106a99a # v0.1.3
         with:
           fail-on: high
 ```
@@ -65,7 +65,6 @@ This complements, rather than duplicates, the other RexCode tools:
 - [ChangeGuard](https://github.com/RexCode-Digital/shopify-app-changeguard) reviews meaningful configuration changes.
 - [Scope Guard](https://github.com/RexCode-Digital/shopify-scope-guard) audits declared access scopes against repository evidence.
 - [Upgrade Guard](https://github.com/RexCode-Digital/shopify-upgrade-guard) detects API and platform migration risks.
-- App Review Guard preflights App Store and production-readiness requirements.
 
 GitHub Marketplace: [Shopify App Review Guard](https://github.com/marketplace/actions/shopify-app-review-guard)
 

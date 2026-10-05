@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.4
+
+- Refine npm search metadata and the Action description for Shopify App Store review-readiness checks.
+- Refresh the pinned Action release and remove the duplicate self-reference from related tools.
+
 ## 0.1.3
 
 - Refresh published npm metadata to the canonical RexCode-Digital repository and issue tracker.
