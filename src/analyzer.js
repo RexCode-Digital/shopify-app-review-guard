@@ -13,7 +13,8 @@ const source = {
   submit: 'https://shopify.dev/docs/apps/launch/app-store-review/submit-app-for-review',
   privacy: 'https://shopify.dev/docs/apps/launch/privacy-requirements',
   auth: 'https://shopify.dev/docs/apps/build/authentication-authorization/access-tokens',
-  webhooks: 'https://shopify.dev/docs/apps/build/webhooks/verify-deliveries'
+  webhooks: 'https://shopify.dev/docs/apps/build/webhooks/verify-deliveries',
+  appBridge: 'https://shopify.dev/docs/apps/launch/shopify-app-store/app-store-requirements#use-the-latest-version-of-shopify-app-bridge'
 };
 
 function finding(ruleId, severity, status, title, rationale, remediation, file, line, confidence = 'medium', evidence = source.requirements) {
@@ -96,6 +97,7 @@ export function analyze(root = '.', options = {}) {
   if (webhook && !/X-Shopify-Webhook-Id|idempoten|dedup|duplicate/i.test(text)) findings.push(finding('AR-WEBHOOK-004', 'low', 'NEEDS_REVIEW', 'Duplicate delivery handling is not evident', 'Shopify may retry deliveries; no recognizable idempotency or webhook ID handling was found.', 'Use idempotent processing or persist X-Shopify-Webhook-Id before processing.', 'repository', undefined, 'medium', source.webhooks));
   const embedded = parsedConfigs.some(c => c.data.embedded === true);
   if (embedded && !/session token|sessionToken|id_token|token.exchange|token-exchange|authenticate\./i.test(text)) findings.push(finding('AR-AUTH-001', 'high', 'NEEDS_REVIEW', 'Embedded authentication evidence is not evident', 'The app is configured as embedded but no recognizable session-token or token-exchange pattern was found.', 'Verify embedded requests with Shopify-supported authentication helpers and session tokens.', 'repository', undefined, 'medium', source.auth));
+  if (embedded && !hasLatestAppBridgeScript(files)) findings.push(finding('AR-APP-BRIDGE-001', 'medium', 'NEEDS_REVIEW', 'Latest App Bridge script evidence is not visible', 'The app is configured as embedded, but no recognizable latest app-bridge.js script tag was found in scanned HTML or JSX. A framework may inject the script at runtime, which static analysis cannot determine.', 'Verify that the latest Shopify App Bridge script is loaded before other scripts in every embedded document.', 'repository', undefined, 'medium', source.appBridge));
   if (/X-Shopify-Access-Token|admin\/api|graphql\.json/i.test(text) && !/authenticate|session|token.exchange|accessToken/i.test(text)) findings.push(finding('AR-AUTH-002', 'high', 'NEEDS_REVIEW', 'Admin API access may be unauthenticated', 'Admin API-like requests were found without nearby authentication evidence.', 'Trace the request path and require authenticated Shopify credentials server-side.', 'repository', undefined, 'low', source.auth));
   if (/(api_secret|client_secret|access_token|admin_api_access_token)\s*[:=]\s*["'][^"']{12,}/i.test(credentialText) || /shpat_[a-z0-9]+/i.test(credentialText)) findings.push(finding('AR-AUTH-004', 'high', 'FAIL', 'Potential hardcoded Shopify credential', 'A credential-like assignment or Shopify access-token pattern was detected. The value is intentionally not printed.', 'Remove the credential, rotate it, and load secrets from the deployment secret store.', 'repository', undefined, 'high', source.auth));
   for (const f of files) if (/^\.env(?:\.|$)/i.test(path.basename(f.file)) && !/^\.env\.example$/i.test(path.basename(f.file))) findings.push(finding('AR-SECURITY-001', 'high', 'NEEDS_REVIEW', 'Environment file is present in the scanned repository', 'Environment files commonly contain credentials; static analysis cannot determine whether this file is committed or sanitized.', 'Ensure secret-bearing environment files are ignored and never committed.', f.file, undefined, 'medium', source.requirements));
@@ -110,4 +112,26 @@ export function analyze(root = '.', options = {}) {
   findings.sort((a, b) => `${a.ruleId}:${a.file}`.localeCompare(`${b.ruleId}:${b.file}`));
   const counts = Object.fromEntries(['PASS', 'FAIL', 'WARN', 'NEEDS_REVIEW', 'UNKNOWN', 'SKIPPED'].map(s => [s, findings.filter(f => f.status === s).length]));
   return { toolVersion: TOOL_VERSION, evidenceVersion: EVIDENCE_VERSION, target: 'Shopify App Store / production readiness', root: repo, summary: { ...counts, findingCount: findings.length }, findings, manualChecks: findings.filter(f => f.status === 'NEEDS_REVIEW').map(f => f.ruleId), skipped };
+}
+
+function hasLatestAppBridgeScript(files) {
+  return files.some(file => {
+    if (!/\.(?:html?|[jt]sx)$/i.test(file.file)) return false;
+    const pattern = /<script\b[^>]*\bsrc\s*=\s*(["'])https:\/\/cdn\.shopify\.com\/shopifycloud\/app-bridge\.js\1[^>]*>/gi;
+    for (const match of file.text.matchAll(pattern)) {
+      if (!insideComment(file.text, match.index)) return true;
+    }
+    return false;
+  });
+}
+
+function insideComment(source, index) {
+  if (source.lastIndexOf('<!--', index) > source.lastIndexOf('-->', index)) return true;
+  if (source.lastIndexOf('/*', index) > source.lastIndexOf('*/', index)) return true;
+  const lineStart = source.lastIndexOf('\n', index - 1) + 1;
+  const prefix = source.slice(lineStart, index);
+  const marker = prefix.lastIndexOf('//');
+  if (marker < 0) return false;
+  const before = prefix.slice(0, marker);
+  return before.trim() === '' || /[;{}]\s*$/.test(before);
 }

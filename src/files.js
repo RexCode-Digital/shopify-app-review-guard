@@ -18,7 +18,7 @@ export function readFiles(root) {
       const absolute = path.join(dir, entry.name), file = path.relative(root, absolute).replaceAll(path.sep, '/');
       if (entry.isSymbolicLink()) { skipped.push({ file, reason: 'Symbolic link' }); continue; }
       if (entry.isDirectory()) { if (!SKIP.has(entry.name) && !entry.name.startsWith('.')) visit(absolute); continue; }
-      if (!entry.isFile() || (!/\.(?:[cm]?[jt]sx?|json|toml|ya?ml|md|txt|graphql)$/i.test(entry.name) && !/^\.env(?:\.|$)/i.test(entry.name))) continue;
+      if (!entry.isFile() || (!/\.(?:[cm]?[jt]sx?|html?|json|toml|ya?ml|md|txt|graphql)$/i.test(entry.name) && !/^\.env(?:\.|$)/i.test(entry.name))) continue;
       if (files.length >= 2000 || fs.lstatSync(absolute).size > 1024 * 1024) { skipped.push({ file, reason: 'Analysis limit' }); continue; }
       files.push({ file, abs: absolute, text: safeFile(root, absolute) });
     }

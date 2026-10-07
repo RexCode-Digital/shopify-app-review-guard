@@ -1,6 +1,6 @@
 {
   "name": "shopify-app-review-guard",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Run offline Shopify App Store review-readiness checks against app configuration and repository evidence.",
   "type": "module",
   "engines": {

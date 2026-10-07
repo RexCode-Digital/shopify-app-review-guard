@@ -6,6 +6,7 @@
 | `AR-COMPLIANCE-*` | Mandatory compliance webhook configuration and handler review |
 | `AR-WEBHOOK-*` | HMAC, raw-body, timing-safe comparison, and duplicate delivery review |
 | `AR-AUTH-*` | Embedded authentication and credential safety |
+| `AR-APP-BRIDGE-001` | Visible latest App Bridge script evidence for embedded apps; missing static evidence is `NEEDS_REVIEW` because frameworks can inject scripts at runtime |
 | `AR-SECURITY-*` | Obvious secrets and dynamic execution review |
 | `AR-API-*` | Submission-specific API review signals; migration work belongs to Upgrade Guard |
 | `AR-BILLING-*` | Billing lifecycle review signals |
