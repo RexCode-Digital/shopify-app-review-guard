@@ -7,8 +7,25 @@ import { analyze } from '../src/analyzer.js';
 import { human, sarif, shouldFail } from '../src/output.js';
 
 function fixture(config, code = '') { const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'review-guard-')); fs.writeFileSync(path.join(dir, 'shopify.app.toml'), config); fs.writeFileSync(path.join(dir, 'app.js'), code); return dir; }
-test('reports missing compliance configuration and external listing checks', () => { const report = analyze(fixture('application_url = "https://example.test"\nembedded = true\n')); assert.ok(report.findings.some(f => f.ruleId === 'AR-COMPLIANCE-001')); assert.ok(report.findings.some(f => f.status === 'NEEDS_REVIEW')); assert.equal(report.toolVersion, '0.1.4'); });
+test('reports missing compliance configuration and external listing checks', () => { const report = analyze(fixture('application_url = "https://example.test"\nembedded = true\n')); assert.ok(report.findings.some(f => f.ruleId === 'AR-COMPLIANCE-001')); assert.ok(report.findings.some(f => f.status === 'NEEDS_REVIEW')); assert.equal(report.toolVersion, '0.1.5'); });
 test('recognizes compliance topics and webhook security signals', () => { const dir = fixture('application_url = "https://example.test"\n[webhooks]\napi_version = "2026-10"\n[[webhooks.subscriptions]]\nuri = "/webhooks"\ncompliance_topics = ["customers/data_request", "customers/redact", "shop/redact"]\n', 'export function webhook(req) { const rawBody = req.rawBody; const signature = req.headers["X-Shopify-Hmac-SHA256"]; crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(signature)); const id = req.headers["X-Shopify-Webhook-Id"]; }'); const report = analyze(dir); assert.equal(report.findings.filter(f => f.ruleId === 'AR-COMPLIANCE-001').length, 0); assert.ok(!report.findings.some(f => f.ruleId === 'AR-WEBHOOK-001')); });
+test('embedded apps without a visible App Bridge script get conservative review guidance', () => {
+  const dir = fixture('application_url = "https://example.test"\nembedded = true\n');
+  const finding = analyze(dir).findings.find(f => f.ruleId === 'AR-APP-BRIDGE-001');
+  assert.ok(finding); assert.equal(finding.status, 'NEEDS_REVIEW'); assert.equal(finding.severity, 'medium');
+  assert.match(finding.rationale, /framework may inject the script at runtime/i);
+  assert.match(finding.evidence, /shopify\.dev\/docs\/apps\/launch\/shopify-app-store/);
+});
+test('recognizes the official static App Bridge script while ignoring comments and lookalikes', () => {
+  const positive = fixture('application_url = "https://example.test"\nembedded = true\n');
+  fs.writeFileSync(path.join(positive, 'index.html'), '<head><script src="https://cdn.shopify.com/shopifycloud/app-bridge.js"></script></head>');
+  assert.ok(!analyze(positive).findings.some(f => f.ruleId === 'AR-APP-BRIDGE-001'));
+  const falsePositive = fixture('application_url = "https://example.test"\nembedded = true\n');
+  fs.writeFileSync(path.join(falsePositive, 'index.html'), '<!-- <script src="https://cdn.shopify.com/shopifycloud/app-bridge.js"></script> -->');
+  fs.writeFileSync(path.join(falsePositive, 'app.jsx'), '<script src="https://cdn.shopify.com/shopifycloud/app-bridge.js.evil"></script>\n{/* <script src="https://cdn.shopify.com/shopifycloud/app-bridge.js"></script> */}\n// <script src="https://cdn.shopify.com/shopifycloud/app-bridge.js"></script>');
+  fs.writeFileSync(path.join(falsePositive, 'README.md'), '<script src="https://cdn.shopify.com/shopifycloud/app-bridge.js"></script>');
+  assert.ok(analyze(falsePositive).findings.some(f => f.ruleId === 'AR-APP-BRIDGE-001'));
+});
 test('redacts secret values and produces valid SARIF shape', () => { const report = analyze(fixture('application_url = "http://localhost:3000"\n', 'const client_secret = "this-is-not-output-and-is-long";')); const json = JSON.stringify(report); assert.ok(!json.includes('this-is-not-output-and-is-long')); assert.equal(sarif(report).version, '2.1.0'); assert.equal(shouldFail(report, 'high'), true); });
 test('detects committed .env files but does not print their values', () => { const dir = fixture('application_url = "https://example.test"\n'); fs.writeFileSync(path.join(dir, '.env'), 'SHOPIFY_API_SECRET=never-print-this-value\n'); const report = analyze(dir); assert.ok(report.findings.some(f => f.ruleId === 'AR-SECURITY-001')); assert.ok(!JSON.stringify(report).includes('never-print-this-value')); });
 test('honors fail-on severity and strict review policy', () => { const dir = fixture('application_url = "https://example.test"\n[webhooks]\n[[webhooks.subscriptions]]\nuri = "/webhooks"\ncompliance_topics = ["customers/data_request", "customers/redact", "shop/redact"]\n', 'app.post("/webhooks", express.json(), handler);'); const report = analyze(dir); assert.equal(shouldFail(report, 'high'), true); assert.equal(shouldFail(report, 'medium'), true); const embedded = analyze(fixture('application_url = "https://example.test"\nembedded = true\n[webhooks]\n[[webhooks.subscriptions]]\nuri = "/webhooks"\ncompliance_topics = ["customers/data_request", "customers/redact", "shop/redact"]\n')); assert.equal(shouldFail(embedded, 'high'), false); assert.equal(shouldFail(embedded, 'high', true), true); });

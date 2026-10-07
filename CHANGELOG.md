@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.5
+
+- Add a conservative App Bridge review finding when an embedded app has no statically visible official app-bridge.js integration evidence.
+
 ## 0.1.4
 
 - Refine npm search metadata and the Action description for Shopify App Store review-readiness checks.

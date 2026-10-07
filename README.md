@@ -40,7 +40,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: RexCode-Digital/shopify-app-review-guard@4db0319d82f360e177241a9d002a1bd76106a99a # v0.1.3
+      - uses: RexCode-Digital/shopify-app-review-guard@f8cf1478749ab662e534ee101b8a66a163848245 # v0.1.4
         with:
           fail-on: high
 ```
@@ -53,6 +53,7 @@ Rules report deterministic signals with explicit confidence. Repository-wide heu
 - `customers/data_request`, `customers/redact`, and `shop/redact` configuration
 - raw-body HMAC verification, timing-safe comparisons, and duplicate delivery handling
 - embedded authentication and Admin API credential handling
+- latest App Bridge script evidence for embedded apps; missing visible markup is `NEEDS_REVIEW` because frameworks may inject the script at runtime
 - potential hardcoded credentials, environment files, and dynamic execution signals
 - protected customer-data and billing signals
 - lightweight listing manifest and manual-check tracking
@@ -132,7 +133,7 @@ Report vulnerabilities privately using [SECURITY.md](SECURITY.md). Never include
 The Action example pins the reviewed v0.1.2 release commit. Verify the release reference with:
 
 ```bash
-gh api repos/RexCode-Digital/shopify-app-review-guard/git/ref/tags/v0.1.2 --jq .object.sha
+gh api repos/RexCode-Digital/shopify-app-review-guard/git/ref/tags/v0.1.4 --jq .object.sha
 ```
 
 Published patch tags are retained; existing minor aliases are movable. A reviewed full commit SHA is the immutable execution reference.
