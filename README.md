@@ -40,7 +40,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: RexCode-Digital/shopify-app-review-guard@f8cf1478749ab662e534ee101b8a66a163848245 # v0.1.4
+      - uses: RexCode-Digital/shopify-app-review-guard@14aa6c92d68c3f52ea06e8bb608328ce19f998d7 # v0.1.5
         with:
           fail-on: high
 ```
@@ -130,10 +130,10 @@ Report vulnerabilities privately using [SECURITY.md](SECURITY.md). Never include
 
 ## Immutable SHA usage
 
-The Action example pins the reviewed v0.1.2 release commit. Verify the release reference with:
+The Action example pins the reviewed v0.1.5 release commit. Verify the release reference with:
 
 ```bash
-gh api repos/RexCode-Digital/shopify-app-review-guard/git/ref/tags/v0.1.4 --jq .object.sha
+git fetch --tags origin && git rev-parse 'v0.1.5^{commit}'
 ```
 
 Published patch tags are retained; existing minor aliases are movable. A reviewed full commit SHA is the immutable execution reference.
