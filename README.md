@@ -96,6 +96,8 @@ npx shopify-app-review-guard --help
 
 The Action supports `path`, `config`, `baseline`, `format`, `fail-on`, `strict`, and `show-unmapped`. Outputs are `outcome`, `finding-count`, `new-finding-count`, `resolved-finding-count`, `fail-count`, `warning-count`, `review-count`, `unknown-count`, `report`, and `rule-ids`. `report` is the rendered multiline report, usable as JSON when `format: json`. The bundled Action runs on Node 24 without installing dependencies in the consumer job.
 
+The Action example pins v0.1.5, which supports `human`, `json`, and `sarif`, but not Markdown or baselines. The Markdown and baseline CLI examples and the new baseline Action input/outputs above are part of the unreleased changes here; npm and Action v0.1.5 do not support them yet.
+
 ## Output and scan limits
 
 Human output includes status, rationale, remediation, and official evidence. JSON includes findings, counts, manual checks, and skipped files. SARIF is version 2.1.0. Reads are bounded to 2,000 files and 1 MiB per file; symlinks are not followed. Missing/unreadable roots and unsafe explicit inputs exit 2. Skipped files require manual review. `.env` variants are review signals; the scanner cannot determine whether they are committed or contain live secrets.
