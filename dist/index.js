@@ -2035,8 +2035,8 @@ var TOOL_VERSION = "0.1.5";
 
 // src/analyzer.js
 var import_toml = __toESM(require_toml(), 1);
-import fs2 from "node:fs";
-import path2 from "node:path";
+import fs3 from "node:fs";
+import path3 from "node:path";
 
 // src/files.js
 import fs from "node:fs";
@@ -2080,6 +2080,182 @@ function readFiles(root) {
   return { files, skipped };
 }
 
+// src/webhook-review.js
+var CODE = /\.(?:[cm]?[jt]sx?|graphql|gql)$/i;
+function maskComments(text) {
+  let out = "", quote = "", escaped = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i], next = text[i + 1];
+    if (quote) {
+      out += ch;
+      if (escaped) escaped = false;
+      else if (ch === "\\") escaped = true;
+      else if (ch === quote) quote = "";
+      continue;
+    }
+    if (ch === '"' || ch === "'" || ch === "`") {
+      quote = ch;
+      out += ch;
+      continue;
+    }
+    if (ch === "/" && next === "/") {
+      out += "  ";
+      i++;
+      while (i + 1 < text.length && text[i + 1] !== "\n") {
+        out += " ";
+        i++;
+      }
+      continue;
+    }
+    if (ch === "/" && next === "*") {
+      out += "  ";
+      i++;
+      while (i + 1 < text.length && !(text[i] === "*" && text[i + 1] === "/")) {
+        out += text[i] === "\n" ? "\n" : " ";
+        i++;
+      }
+      if (i + 1 < text.length) {
+        out += "  ";
+        i++;
+      }
+      continue;
+    }
+    out += ch;
+  }
+  return out;
+}
+function classifyDestination(uri, applicationUrl) {
+  if (typeof uri !== "string" || !uri.trim()) return { transport: "unknown", pathname: null };
+  const value = uri.trim();
+  if (/^arn:aws(?:-us-gov|-cn)?:events:[^:]+:\d{12}:event-bus\//i.test(value)) return { transport: "eventbridge", pathname: null };
+  if (/^(?:pubsub|googlepubsub|gcp-pubsub):\/\//i.test(value)) return { transport: "pubsub", pathname: null };
+  try {
+    const url = new URL(value, applicationUrl);
+    if (url.protocol === "https:" && !url.username && !url.password) return { transport: "https", pathname: cleanPath(url.pathname) };
+    if (url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)) return { transport: "development", pathname: cleanPath(url.pathname) };
+  } catch {
+  }
+  return { transport: "unknown", pathname: null };
+}
+function cleanPath(value) {
+  const normalized = `/${String(value).split("/").filter(Boolean).join("/")}`;
+  return normalized === "/" ? "/" : normalized;
+}
+function routeCandidates(files) {
+  const candidates = [];
+  for (const file of files) {
+    if (!CODE.test(file.file)) continue;
+    const source2 = maskComments(file.text);
+    const found = /* @__PURE__ */ new Map();
+    const matcher = /\b(?:app|router|server|fastify|webhookRouter)\s*\.\s*(?:post|route)\s*\(\s*(['"`])([^'"`]+)\1/g;
+    for (const match of source2.matchAll(matcher)) if (!/[${}]/.test(match[2])) found.set(cleanPath(match[2]), source2.slice(0, match.index).split("\n").length);
+    const routeFile = frameworkRoute(file.file, source2);
+    if (routeFile) found.set(routeFile, source2.slice(0, source2.indexOf("export")).split("\n").length);
+    for (const [route, line] of found) candidates.push({ file: file.file, route, source: source2, line });
+  }
+  return candidates;
+}
+function frameworkRoute(file, source2) {
+  if (!/\bexport\s+(?:const|async\s+function)\s+action\b/.test(source2)) return null;
+  const normalized = file.replaceAll("\\", "/");
+  const match = normalized.match(/(?:^|\/)app\/routes\/(.+)\.(?:[cm]?[jt]sx?)$/i);
+  if (!match) return null;
+  let route = match[1].replaceAll(".", "/").replace(/\([^/]+\)\//g, "").replace(/^_+|_+$/g, "");
+  route = route.split("/").filter(Boolean).map((part) => part.startsWith("$") ? ":" + part.slice(1) : part).join("/");
+  return cleanPath(route);
+}
+function matchesRoute(pattern, actual) {
+  if (!pattern || !actual) return false;
+  const escaped = pattern.split("/").map((part) => part.startsWith(":") || part === "*" ? "[^/]+" : part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("/");
+  return new RegExp(`^${escaped}/?$`).test(actual);
+}
+function routeAuth(source2, allSource) {
+  const reactRouter = /\bauthenticate\s*\.\s*webhook\s*\(/.test(source2) && /@shopify\/shopify-app-(?:react-router|remix)\/server/.test(allSource);
+  const apiLibrary = /\b(?:shopify\s*\.\s*)?webhooks\s*\.\s*validate\s*\(/.test(source2) && /@shopify\/shopify-api/.test(allSource);
+  const manualHmac = /(?:x-shopify-hmac-sha256|shopify-hmac-sha256)/i.test(source2) && /createHmac\s*\(\s*['"]sha256['"]/.test(source2) && /\.update\s*\(\s*(?:rawBody|rawRequestBody|req\.(?:rawBody|body)|request\.(?:rawBody|body))/i.test(source2) && /timingSafeEqual\s*\(/i.test(source2);
+  return reactRouter || apiLibrary || manualHmac;
+}
+function reviewDeliveries({ files, endpoints, applicationUrl, allSource }) {
+  const candidates = routeCandidates(files), findings = [];
+  const deliveries = endpoints.length ? endpoints : candidates.filter((candidate) => /webhook|events/i.test(candidate.route) || /authenticate\s*\.\s*webhook|x-shopify-(?:hmac|webhook)|shopify-hmac-sha256/i.test(candidate.source)).map((candidate) => ({ uri: candidate.route, kind: "inferred" }));
+  for (let i = 0; i < deliveries.length; i++) {
+    const delivery = deliveries[i], destination = classifyDestination(delivery.uri, delivery.applicationUrl ?? applicationUrl);
+    if (destination.transport === "eventbridge" || destination.transport === "pubsub") {
+      findings.push({ ruleId: "AR-EVENTS-004", severity: "medium", status: "NEEDS_REVIEW", title: "Cloud event destination requires provider-side review", rationale: "Shopify does not require HTTPS HMAC verification for EventBridge or Pub/Sub deliveries; static repository analysis cannot verify the cloud resource policy or delivery identity.", remediation: "Verify the event bus resource policy, consumer identity, retry handling, and idempotent processing in the cloud provider.", file: delivery.file ?? "repository", confidence: "manual", evidence: "https://shopify.dev/docs/apps/build/webhooks/verify-deliveries" });
+      findings.push({ ruleId: "AR-WEBHOOK-004", severity: "low", status: "NEEDS_REVIEW", title: "Duplicate-delivery handling requires provider route review", rationale: "Cloud event deliveries can be retried; static repository analysis cannot associate the destination with one consumer handler.", remediation: "Verify that the consumer processes duplicate messages idempotently.", file: delivery.file ?? "repository", confidence: "manual", evidence: "https://shopify.dev/docs/apps/build/webhooks/verify-deliveries" });
+      continue;
+    }
+    if (!["https", "development"].includes(destination.transport)) {
+      findings.push({ ruleId: "AR-WEBHOOK-001", severity: "high", status: "NEEDS_REVIEW", title: "Delivery authentication requires route review", rationale: "The configured delivery transport or route could not be associated with a statically recognised HTTPS handler.", remediation: "Confirm the delivery transport and verify the specific handler with Shopify\u2019s supported framework helper or raw-body HMAC procedure.", file: delivery.file ?? "repository", confidence: "low", evidence: "https://shopify.dev/docs/apps/build/webhooks/verify-deliveries" });
+      continue;
+    }
+    const matched = destination.pathname ? candidates.filter((candidate) => matchesRoute(candidate.route, destination.pathname)) : [];
+    const uniqueFiles = new Set(matched.map((candidate) => candidate.file));
+    const associated = matched.length === 1 && uniqueFiles.size === 1 && candidates.filter((item) => item.file === matched[0].file).length === 1 ? matched[0] : null;
+    if (!associated || !routeAuth(associated.source, allSource)) {
+      findings.push({ ruleId: "AR-WEBHOOK-001", severity: "high", status: "NEEDS_REVIEW", title: "Delivery authentication evidence is not linked to this route", rationale: "A configured HTTPS delivery could not be connected to one route with a recognised Shopify verifier. Evidence in another handler does not cover this destination.", remediation: "Trace this route to its handler and verify each HTTPS delivery with Shopify\u2019s framework helper or raw-body HMAC procedure.", file: associated?.file ?? delivery.file ?? "repository", line: associated?.line, confidence: associated ? "medium" : "low", evidence: "https://shopify.dev/docs/apps/build/webhooks/verify-deliveries" });
+    } else {
+      findings.push({ ruleId: "AR-WEBHOOK-001", severity: "info", status: "PASS", title: "Recognisable delivery verifier is present on the matched route", rationale: "A Shopify framework verifier or raw-body HMAC pattern was found on the one statically matched route. This is source evidence, not runtime verification.", remediation: "Confirm the deployed route uses this handler and the expected secret.", file: associated.file, line: associated.line, confidence: "medium", evidence: "https://shopify.dev/docs/apps/build/webhooks/verify-deliveries" });
+    }
+    const routeSource = associated?.source ?? "";
+    if (associated && /(?:shopify-webhook-id|x-shopify-webhook-id|idempoten|dedup|duplicate)/i.test(routeSource)) {
+      findings.push({ ruleId: "AR-WEBHOOK-004", severity: "info", status: "PASS", title: "Duplicate-delivery handling signal is present on the matched route", rationale: "An idempotency or delivery-ID pattern is present on this route; the persistent behaviour cannot be proven statically.", remediation: "Verify retries remain safe against the production data store.", file: associated.file, line: associated.line, confidence: "medium", evidence: "https://shopify.dev/docs/apps/build/webhooks/verify-deliveries" });
+    } else {
+      findings.push({ ruleId: "AR-WEBHOOK-004", severity: "low", status: "NEEDS_REVIEW", title: "Duplicate-delivery handling is not evident on this route", rationale: "Shopify retries failed deliveries and may deliver an event more than once; no route-local idempotency signal was found.", remediation: "Verify that processing is idempotent or deduplicates deliveries using Shopify\u2019s delivery ID.", file: associated?.file ?? delivery.file ?? "repository", line: associated?.line, confidence: associated ? "medium" : "low", evidence: "https://shopify.dev/docs/apps/build/webhooks/verify-deliveries" });
+    }
+    if (associated && /(?:express|bodyParser)\.json\s*\(/.test(routeSource) && !/rawBody|verify\s*[:=]/i.test(routeSource)) {
+      findings.push({ ruleId: "AR-WEBHOOK-002", severity: "high", status: "WARN", title: "JSON parsing may run before this delivery route", rationale: "A JSON body parser appears before or alongside the matched route without recognisable raw-body capture.", remediation: "Capture the raw request body before parsing and verify the HMAC against those bytes.", file: associated.file, line: associated.line, confidence: "medium", evidence: "https://shopify.dev/docs/apps/build/webhooks/verify-deliveries" });
+    }
+    if (associated && /(?:signature\s*===|===\s*signature|signature\s*==|==\s*signature)/i.test(routeSource) && !/timingSafeEqual/i.test(routeSource)) {
+      findings.push({ ruleId: "AR-WEBHOOK-003", severity: "medium", status: "WARN", title: "Direct signature comparison appears on this route", rationale: "A direct signature comparison was detected without a timing-safe comparison in the matched route.", remediation: "Use Shopify\u2019s verifier or a timing-safe comparison after decoding both signatures.", file: associated.file, line: associated.line, confidence: "medium", evidence: "https://shopify.dev/docs/apps/build/webhooks/verify-deliveries" });
+    }
+  }
+  return findings;
+}
+function codeFiles(files) {
+  return files.filter((file) => CODE.test(file.file)).map((file) => ({ ...file, text: maskComments(file.text) }));
+}
+
+// src/baseline.js
+import crypto from "node:crypto";
+import fs2 from "node:fs";
+import path2 from "node:path";
+var DEFAULT_BASELINE = ".app-review-guard-baseline.json";
+function findingFingerprint(finding2) {
+  const identity = [finding2.ruleId, finding2.file, finding2.title].join("\0");
+  return crypto.createHash("sha256").update(identity).digest("hex");
+}
+function loadBaseline(root, selected = void 0) {
+  const relative = selected ?? DEFAULT_BASELINE, file = path2.resolve(root, relative);
+  if (!fs2.existsSync(file)) return null;
+  const raw = safeFile(root, file);
+  let value;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    throw new Error("Baseline must be valid JSON; contents were not printed");
+  }
+  if (!value || value.schemaVersion !== 1 || !Array.isArray(value.entries) || value.entries.some((entry) => !entry || typeof entry.fingerprint !== "string" || !/^[a-f0-9]{64}$/.test(entry.fingerprint) || typeof entry.ruleId !== "string" || typeof entry.file !== "string" || typeof entry.title !== "string")) throw new Error("Baseline format is invalid; create a new baseline");
+  return { file: relative, entries: value.entries };
+}
+function classifyAgainstBaseline(findings, baseline) {
+  if (!baseline) return { findings: findings.map((finding2) => ({ ...finding2, lifecycle: "UNCHANGED" })), resolvedFindings: [], enabled: false };
+  const currentCounts = /* @__PURE__ */ new Map();
+  for (const finding2 of findings) {
+    const key = findingFingerprint(finding2);
+    currentCounts.set(key, (currentCounts.get(key) ?? 0) + 1);
+  }
+  const seen = /* @__PURE__ */ new Map();
+  const classified = findings.map((finding2) => {
+    const fingerprint = findingFingerprint(finding2), prior = seen.get(fingerprint) ?? 0;
+    seen.set(fingerprint, prior + 1);
+    const existing = baseline.entries.some((entry) => entry.fingerprint === fingerprint);
+    return { ...finding2, fingerprint, lifecycle: existing ? "EXISTING" : "NEW" };
+  });
+  const resolvedFindings = baseline.entries.filter((entry) => !currentCounts.has(entry.fingerprint)).map((entry) => ({ ...entry, status: "RESOLVED", lifecycle: "RESOLVED", severity: "info", confidence: "baseline", rationale: "This finding was present in the saved baseline and is no longer detected.", remediation: "No action is required unless the underlying risk returns.", evidence: null, evidenceVersion: null }));
+  return { findings: classified, resolvedFindings, enabled: true };
+}
+
 // src/analyzer.js
 var EVIDENCE_VERSION = "2026-10";
 var CONFIG = /shopify\.app(?:\.[^./]+)?\.toml$/;
@@ -2090,6 +2266,7 @@ var source = {
   privacy: "https://shopify.dev/docs/apps/launch/privacy-requirements",
   auth: "https://shopify.dev/docs/apps/build/authentication-authorization/access-tokens",
   webhooks: "https://shopify.dev/docs/apps/build/webhooks/verify-deliveries",
+  events: "https://shopify.dev/docs/apps/build/events/subscribe",
   appBridge: "https://shopify.dev/docs/apps/launch/shopify-app-store/app-store-requirements#use-the-latest-version-of-shopify-app-bridge"
 };
 function finding(ruleId, severity, status, title, rationale, remediation, file, line, confidence = "medium", evidence = source.requirements) {
@@ -2110,10 +2287,10 @@ function allText(files) {
 }
 var LISTING_ITEMS = ["privacyPolicyUrl", "supportUrl", "testInstructions", "emergencyContact"];
 function manifest(root) {
-  const names = [".app-review-guard.yml", ".app-review-guard.yaml", ".app-review-guard.json"].filter((n) => fs2.existsSync(path2.join(root, n)));
+  const names = [".app-review-guard.yml", ".app-review-guard.yaml", ".app-review-guard.json"].filter((n) => fs3.existsSync(path3.join(root, n)));
   if (names.length > 1) throw new Error("Multiple listing manifests found; keep one");
   if (!names.length) return null;
-  const file = names[0], raw = safeFile(root, path2.join(root, file));
+  const file = names[0], raw = safeFile(root, path3.join(root, file));
   try {
     let value;
     if (file.endsWith(".json")) value = JSON.parse(raw);
@@ -2143,7 +2320,7 @@ function parseApp(text) {
   }
   if (data.application_url !== void 0 && typeof data.application_url !== "string") throw new Error("application_url must be a string");
   if (data.embedded !== void 0 && typeof data.embedded !== "boolean") throw new Error("embedded must be a boolean");
-  for (const key of ["auth", "webhooks", "build"]) if (data[key] !== void 0 && (!data[key] || typeof data[key] !== "object" || Array.isArray(data[key]))) throw new Error(`${key} must be a table`);
+  for (const key of ["auth", "webhooks", "events", "build"]) if (data[key] !== void 0 && (!data[key] || typeof data[key] !== "object" || Array.isArray(data[key]))) throw new Error(`${key} must be a table`);
   if (data.auth?.redirect_urls !== void 0 && (!Array.isArray(data.auth.redirect_urls) || data.auth.redirect_urls.some((v) => typeof v !== "string"))) throw new Error("auth.redirect_urls must be an array of strings");
   if (data.webhooks?.api_version !== void 0 && typeof data.webhooks.api_version !== "string") throw new Error("webhooks.api_version must be a string");
   if (data.webhooks?.subscriptions !== void 0 && !Array.isArray(data.webhooks.subscriptions)) throw new Error("webhooks.subscriptions must be an array of tables");
@@ -2151,6 +2328,13 @@ function parseApp(text) {
     if (!subscription || typeof subscription !== "object" || Array.isArray(subscription)) throw new Error("Webhook subscription must be a table");
     if (subscription.compliance_topics !== void 0 && (!Array.isArray(subscription.compliance_topics) || subscription.compliance_topics.some((v) => typeof v !== "string"))) throw new Error("compliance_topics must be an array of strings");
     if (subscription.uri !== void 0 && typeof subscription.uri !== "string") throw new Error("Webhook uri must be a string");
+  }
+  if (data.events?.api_version !== void 0 && typeof data.events.api_version !== "string") throw new Error("events.api_version must be a string");
+  if (data.events?.subscription !== void 0 && !Array.isArray(data.events.subscription)) throw new Error("events.subscription must be an array of tables");
+  for (const subscription of data.events?.subscription ?? []) {
+    if (!subscription || typeof subscription !== "object" || Array.isArray(subscription)) throw new Error("Events subscription must be a table");
+    for (const key of ["handle", "topic", "uri", "query", "query_filter"]) if (subscription[key] !== void 0 && typeof subscription[key] !== "string") throw new Error(`Events ${key} must be a string`);
+    for (const key of ["actions", "triggers"]) if (subscription[key] !== void 0 && (!Array.isArray(subscription[key]) || subscription[key].some((value) => typeof value !== "string"))) throw new Error(`Events ${key} must be an array of strings`);
   }
   return data;
 }
@@ -2163,13 +2347,24 @@ function urlInfo(value) {
     return { secure: false, local: false, development: false };
   }
 }
-function manual(ruleId, title, rationale, remediation, file = ".app-review-guard.yml") {
-  return finding(ruleId, "medium", "NEEDS_REVIEW", title, rationale, remediation, file, void 0, "manual", source.submit);
-}
 function analyze(root = ".", options = {}) {
-  const repo = path2.resolve(root);
-  const { files, skipped } = readFiles(repo);
-  const cs = options.config ? [{ file: path2.relative(repo, path2.resolve(repo, options.config)).replaceAll(path2.sep, "/"), text: safeFile(repo, path2.resolve(repo, options.config)) }] : configs(files);
+  let repo = path3.resolve(root);
+  let { files, skipped } = readFiles(repo);
+  let cs;
+  if (options.config) {
+    const selected = path3.resolve(repo, options.config), text2 = safeFile(repo, selected);
+    repo = path3.dirname(selected);
+    ({ files, skipped } = readFiles(repo));
+    cs = [{ file: path3.relative(repo, selected).replaceAll(path3.sep, "/"), text: text2 }];
+  } else {
+    const discovered = configs(files), appRoots = [...new Set(discovered.map((c) => path3.dirname(path3.join(repo, c.file))))];
+    if (appRoots.length > 1) throw new Error("Multiple Shopify app roots were found; pass --path for one app or select a configuration with --config.");
+    if (appRoots.length === 1 && appRoots[0] !== repo) {
+      repo = appRoots[0];
+      ({ files, skipped } = readFiles(repo));
+    }
+    cs = configs(files);
+  }
   const findings = [];
   const parsedConfigs = cs.map((c) => ({ ...c, data: parseApp(c.text) }));
   if (!cs.length) findings.push(finding("AR-CONFIG-001", "high", "FAIL", "Shopify app configuration was not found", "No shopify.app*.toml file was discovered.", "Add and validate the Shopify CLI app configuration for the intended deployment.", "repository", void 0, "high"));
@@ -2185,32 +2380,47 @@ function analyze(root = ".", options = {}) {
     if (c.data.webhooks && !c.data.webhooks.api_version) findings.push(finding("AR-CONFIG-007", "low", "NEEDS_REVIEW", "Webhook API version is not evident", "Webhook configuration exists but no explicit API version was detected.", "Confirm the configured version against current Shopify documentation.", c.file, void 0, "medium", source.webhooks));
     for (const topic of TOPICS) if (!(c.data.webhooks?.subscriptions ?? []).some((s) => s.compliance_topics?.includes(topic) && typeof s.uri === "string" && s.uri.trim())) findings.push(finding("AR-COMPLIANCE-001", "high", "FAIL", `Mandatory compliance topic is not configured: ${topic}`, "Shopify requires App Store distributed apps to subscribe to the three compliance topics.", "Add the topic to Shopify app configuration and implement its handler.", c.file, void 0, "high", source.submit));
   }
-  const code = files.filter((f) => /\.(?:[cm]?[jt]sx?|graphql|gql)$/i.test(f.file));
+  const code = codeFiles(files);
   const text = allText(code), credentialText = allText(files);
   const compliance = TOPICS.filter((topic) => hasAny(code, new RegExp(topic.replace("/", "[/:._-]"), "i")));
   for (const topic of TOPICS) if (compliance.includes(topic)) findings.push(finding("AR-COMPLIANCE-002", "medium", "NEEDS_REVIEW", `Compliance handler evidence found for ${topic}`, "A topic-like route or handler was detected, but static analysis cannot prove runtime routing, authentication, or deletion semantics.", "Verify routing, Shopify delivery authentication, and the handler response/retention behaviour.", "repository", void 0, "medium", source.privacy));
-  const webhook = parsedConfigs.some((c) => c.data.webhooks) || /webhook|X-Shopify-Hmac-SHA256|shopify\.webhooks/i.test(text);
-  if (webhook && !/X-Shopify-Hmac-SHA256|authenticate\.webhook|validateWebhook|verify.*hmac/i.test(text)) findings.push(finding("AR-WEBHOOK-001", "high", "NEEDS_REVIEW", "Webhook authentication evidence was not found", "Webhook-related code exists without a recognizable Shopify verification helper or HMAC check.", "Verify every delivery using the official framework helper or the raw-body HMAC procedure.", "repository", void 0, "medium", source.webhooks));
-  if (webhook && /express\.json\s*\(\)|bodyParser\.json\s*\(\)/.test(text) && !/rawBody|verify\s*[:=]/.test(text)) findings.push(finding("AR-WEBHOOK-002", "high", "WARN", "Raw-body handling may occur after body parsing", "JSON body parsing appears alongside webhook code without recognizable raw-body capture.", "Capture the raw request body before parsing and verify the HMAC against it.", "repository", void 0, "medium", source.webhooks));
-  if (webhook && /===\s*(?:expected|signature)|signature\s*===|==\s*signature/.test(text) && !/timingSafeEqual/i.test(text)) findings.push(finding("AR-WEBHOOK-003", "medium", "WARN", "Non-timing-safe signature comparison detected", "A direct signature comparison appears in webhook-related code.", "Use the official verifier or a timing-safe comparison after decoding both signatures.", "repository", void 0, "medium", source.webhooks));
-  if (webhook && !/X-Shopify-Webhook-Id|idempoten|dedup|duplicate/i.test(text)) findings.push(finding("AR-WEBHOOK-004", "low", "NEEDS_REVIEW", "Duplicate delivery handling is not evident", "Shopify may retry deliveries; no recognizable idempotency or webhook ID handling was found.", "Use idempotent processing or persist X-Shopify-Webhook-Id before processing.", "repository", void 0, "medium", source.webhooks));
+  const deliveryEndpoints = [];
+  for (const config of parsedConfigs) {
+    const subscriptions = config.data.events?.subscription ?? [];
+    if (subscriptions.some((subscription) => subscription.query) && !config.data.events?.api_version) findings.push(finding("AR-EVENTS-001", "medium", "NEEDS_REVIEW", "Events query API version is not explicit", "An Events subscription defines a GraphQL query but the [events].api_version used to validate and run it is not visible.", "Set [events].api_version and validate the query against that Shopify API version.", config.file, void 0, "high", source.events));
+    for (let i = 0; i < subscriptions.length; i++) {
+      const subscription = subscriptions[i], label = `Events subscription ${i + 1}`;
+      if (!subscription.handle || !subscription.topic || !subscription.actions?.length || !subscription.uri) findings.push(finding("AR-EVENTS-002", "high", "WARN", `${label} is missing a required field`, "Shopify Events subscriptions require a handle, topic, action, and delivery URI.", "Complete the required subscription fields and validate them with the supported Shopify CLI.", config.file, void 0, "high", source.events));
+      if (subscription.actions?.includes("update") && !subscription.triggers?.length) findings.push(finding("AR-EVENTS-002", "high", "WARN", `${label} update triggers are missing`, "Shopify requires triggers when an Events subscription includes the update action.", "Add the field paths that should trigger update deliveries.", config.file, void 0, "high", source.events));
+      if (subscription.query_filter && !subscription.query) findings.push(finding("AR-EVENTS-003", "medium", "WARN", `${label} filter has no query`, "Shopify evaluates query_filter against the result of the configured query.", "Add the required GraphQL query or remove the filter.", config.file, void 0, "high", source.events));
+      deliveryEndpoints.push({ uri: subscription.uri, kind: "events", file: config.file, applicationUrl: config.data.application_url });
+    }
+    const classic = config.data.webhooks?.subscriptions ?? [];
+    for (const subscription of classic) deliveryEndpoints.push({ uri: subscription.uri, kind: "webhook", file: config.file, applicationUrl: config.data.application_url });
+  }
+  findings.push(...reviewDeliveries({ files: code, endpoints: deliveryEndpoints, allSource: text }));
   const embedded = parsedConfigs.some((c) => c.data.embedded === true);
   if (embedded && !/session token|sessionToken|id_token|token.exchange|token-exchange|authenticate\./i.test(text)) findings.push(finding("AR-AUTH-001", "high", "NEEDS_REVIEW", "Embedded authentication evidence is not evident", "The app is configured as embedded but no recognizable session-token or token-exchange pattern was found.", "Verify embedded requests with Shopify-supported authentication helpers and session tokens.", "repository", void 0, "medium", source.auth));
   if (embedded && !hasLatestAppBridgeScript(files)) findings.push(finding("AR-APP-BRIDGE-001", "medium", "NEEDS_REVIEW", "Latest App Bridge script evidence is not visible", "The app is configured as embedded, but no recognizable latest app-bridge.js script tag was found in scanned HTML or JSX. A framework may inject the script at runtime, which static analysis cannot determine.", "Verify that the latest Shopify App Bridge script is loaded before other scripts in every embedded document.", "repository", void 0, "medium", source.appBridge));
   if (/X-Shopify-Access-Token|admin\/api|graphql\.json/i.test(text) && !/authenticate|session|token.exchange|accessToken/i.test(text)) findings.push(finding("AR-AUTH-002", "high", "NEEDS_REVIEW", "Admin API access may be unauthenticated", "Admin API-like requests were found without nearby authentication evidence.", "Trace the request path and require authenticated Shopify credentials server-side.", "repository", void 0, "low", source.auth));
   if (/(api_secret|client_secret|access_token|admin_api_access_token)\s*[:=]\s*["'][^"']{12,}/i.test(credentialText) || /shpat_[a-z0-9]+/i.test(credentialText)) findings.push(finding("AR-AUTH-004", "high", "FAIL", "Potential hardcoded Shopify credential", "A credential-like assignment or Shopify access-token pattern was detected. The value is intentionally not printed.", "Remove the credential, rotate it, and load secrets from the deployment secret store.", "repository", void 0, "high", source.auth));
-  for (const f of files) if (/^\.env(?:\.|$)/i.test(path2.basename(f.file)) && !/^\.env\.example$/i.test(path2.basename(f.file))) findings.push(finding("AR-SECURITY-001", "high", "NEEDS_REVIEW", "Environment file is present in the scanned repository", "Environment files commonly contain credentials; static analysis cannot determine whether this file is committed or sanitized.", "Ensure secret-bearing environment files are ignored and never committed.", f.file, void 0, "medium", source.requirements));
+  for (const f of files) if (/^\.env(?:\.|$)/i.test(path3.basename(f.file)) && !/^\.env\.example$/i.test(path3.basename(f.file))) findings.push(finding("AR-SECURITY-001", "high", "NEEDS_REVIEW", "Environment file is present in the scanned repository", "Environment files commonly contain credentials; static analysis cannot determine whether this file is committed or sanitized.", "Ensure secret-bearing environment files are ignored and never committed.", f.file, void 0, "medium", source.requirements));
   if (/child_process\.(?:exec|execSync|spawn)|eval\s*\(/.test(text)) findings.push(finding("AR-SECURITY-002", "medium", "NEEDS_REVIEW", "Dynamic execution requires security review", "A command execution or eval-like pattern was found; this tool does not replace CodeQL or a full SAST review.", "Review inputs, trust boundaries, and use CodeQL/Semgrep for deeper analysis.", "repository", void 0, "medium", source.requirements));
   if (/customer|order|email|phone|address|Customer|Order/i.test(text)) findings.push(finding("AR-DATA-001", "medium", "NEEDS_REVIEW", "Protected customer data signals detected", "Customer, order, or contact-data patterns appear in the repository.", "Verify protected-data access status, privacy disclosures, retention, and listing requirements in Partner Dashboard.", "repository", void 0, "low", source.privacy));
   if (/billing|recurringApplicationCharge|appSubscription|oneTimePurchase|createAppSubscription/i.test(text)) findings.push(finding("AR-BILLING-001", "medium", "NEEDS_REVIEW", "Billing implementation detected", "Billing code is present, but static analysis cannot prove approval, decline, reinstall, or plan-change lifecycle behaviour.", "Test the complete billing lifecycle and verify pricing/listing declarations.", "repository", void 0, "medium", source.requirements));
   if (/REST Admin API|admin\/api\/\d{4}-\d{2}/i.test(text)) findings.push(finding("AR-API-004", "low", "NEEDS_REVIEW", "REST Admin API usage requires review", "REST Admin API references were found. This is a review signal, not an upgrade analysis.", "Confirm the API choice and current Shopify guidance; use Shopify Upgrade Guard for migration analysis.", "repository", void 0, "medium", source.requirements));
   const m = manifest(repo);
   if (m && !m.value) findings.push(finding("AR-LISTING-001", "low", "WARN", "Listing manifest could not be parsed", "The optional manifest is not valid supported JSON/YAML.", "Fix the manifest; all unverified listing requirements remain manual.", m.file, void 0, "high", source.submit));
-  for (const item of LISTING_ITEMS) if (m?.value?.listing?.[item] !== true) findings.push(manual(`AR-LISTING-${item.toUpperCase()}`, `Listing item requires manual verification: ${item}`, "This requirement is external and has not been explicitly verified in the manifest.", "Verify it in the App Store review checklist and Partner Dashboard.", m?.file));
+  for (const item of LISTING_ITEMS) {
+    const declared = m?.value?.listing?.[item] === true;
+    findings.push(finding(`AR-LISTING-${item.toUpperCase()}`, "medium", "NEEDS_REVIEW", `Listing item requires manual verification: ${item}`, declared ? "The optional manifest records this item as declared, but the scanner cannot verify its accuracy or Partner Dashboard state." : "No affirmative declaration was found for this external listing requirement.", "Verify the item against the published listing and current Partner Dashboard state.", m?.file ?? ".app-review-guard.yml", void 0, "manual", source.submit));
+  }
   if (options.showUnmapped && files.some((f) => /shopify/i.test(f.text))) findings.push(finding("AR-REVIEW-001", "low", "UNKNOWN", "Some Shopify behaviour may be outside supported static patterns", "Static analysis cannot understand every framework abstraction or runtime path.", "Review UNKNOWN/NEEDS_REVIEW items and use runtime testing before submission.", "repository", void 0, "low", source.submit));
-  findings.sort((a, b) => `${a.ruleId}:${a.file}`.localeCompare(`${b.ruleId}:${b.file}`));
-  const counts = Object.fromEntries(["PASS", "FAIL", "WARN", "NEEDS_REVIEW", "UNKNOWN", "SKIPPED"].map((s) => [s, findings.filter((f) => f.status === s).length]));
-  return { toolVersion: TOOL_VERSION, evidenceVersion: EVIDENCE_VERSION, target: "Shopify App Store / production readiness", root: repo, summary: { ...counts, findingCount: findings.length }, findings, manualChecks: findings.filter((f) => f.status === "NEEDS_REVIEW").map((f) => f.ruleId), skipped };
+  findings.sort((a, b) => `${a.ruleId}:${a.file}:${a.title}`.localeCompare(`${b.ruleId}:${b.file}:${b.title}`));
+  const baseline = options.baseline === false ? null : loadBaseline(repo, options.baseline);
+  const comparison = classifyAgainstBaseline(findings, baseline), reportFindings = comparison.findings;
+  const counts = Object.fromEntries(["PASS", "FAIL", "WARN", "NEEDS_REVIEW", "UNKNOWN", "SKIPPED"].map((s) => [s, reportFindings.filter((f) => f.status === s).length]));
+  return { toolVersion: TOOL_VERSION, evidenceVersion: EVIDENCE_VERSION, target: "Shopify App Store / production readiness", root: repo, configurations: parsedConfigs.map((config) => config.file), summary: { ...counts, findingCount: reportFindings.length, newFindingCount: reportFindings.filter((f) => f.lifecycle === "NEW").length, resolvedFindingCount: comparison.resolvedFindings.length }, findings: reportFindings, resolvedFindings: comparison.resolvedFindings, baseline: { enabled: comparison.enabled, file: baseline?.file ?? null }, manualChecks: reportFindings.filter((f) => f.status === "NEEDS_REVIEW").map((f) => f.ruleId), skipped };
 }
 function hasLatestAppBridgeScript(files) {
   return files.some((file) => {
@@ -2236,14 +2446,14 @@ function insideComment(source2, index) {
 // src/output.js
 var rank = { low: 1, medium: 2, high: 3 };
 function validateOptions(format = "human", threshold = "high") {
-  if (!["human", "json", "sarif"].includes(format)) throw new Error("format must be human, json, or sarif");
+  if (!["human", "markdown", "json", "sarif"].includes(format)) throw new Error("format must be human, markdown, json, or sarif");
   if (!["none", "low", "medium", "high"].includes(threshold)) throw new Error("fail-on must be none, low, medium, or high");
 }
 function shouldFail(report, threshold = "high", strict = false) {
   validateOptions("human", threshold);
   if (threshold === "none") return false;
   const min = rank[threshold];
-  return report.findings.some((f) => (f.status === "FAIL" || f.status === "WARN" || strict && f.status === "NEEDS_REVIEW") && (rank[f.severity] || 3) >= min);
+  return report.findings.some((f) => (!report.baseline?.enabled || f.lifecycle === "NEW") && (f.status === "FAIL" || f.status === "WARN" || strict && f.status === "NEEDS_REVIEW") && (rank[f.severity] || 3) >= min);
 }
 function human(report) {
   const s = report.summary;
@@ -2253,35 +2463,92 @@ Target: ${report.target}
 
 PASS ${String(s.PASS).padStart(3)}  WARN ${String(s.WARN).padStart(3)}  FAIL ${String(s.FAIL).padStart(3)}  REVIEW ${String(s.NEEDS_REVIEW).padStart(3)}  UNKNOWN ${String(s.UNKNOWN).padStart(3)}
 `;
+  if (report.baseline?.enabled) out += `NEW ${s.newFindingCount}  RESOLVED ${s.resolvedFindingCount}
+`;
   for (const f of report.findings) {
     out += `
-${f.status}  ${f.ruleId}
+${f.status}${f.lifecycle === "NEW" || f.lifecycle === "EXISTING" ? ` (${f.lifecycle})` : ""}  ${f.ruleId}
 ${f.title}
   ${f.rationale}
   File: ${f.file}${f.line ? `:${f.line}` : ""}
   Fix: ${f.remediation}
-  Evidence: ${f.evidence}
+  Evidence: ${f.evidence ?? "Not applicable"}
 `;
   }
+  if (report.resolvedFindings?.length) out += `
+Resolved findings: ${report.resolvedFindings.length}
+`;
   if (s.NEEDS_REVIEW) out += `
 Static analysis found ${s.NEEDS_REVIEW} item(s) requiring manual verification. This report does not guarantee Shopify App Store approval.
 `;
   return out;
 }
+function md(value) {
+  return String(value ?? "").replaceAll("\\", "\\\\").replaceAll("|", "\\|").replace(/[\r\n]+/g, " ");
+}
+function markdown(report) {
+  const s = report.summary;
+  let out = `# Shopify App Store readiness review
+
+This report records offline repository evidence. It does not predict or guarantee Shopify approval.
+
+## Summary
+
+| Status | Count |
+| --- | ---: |
+${["PASS", "FAIL", "WARN", "NEEDS_REVIEW", "UNKNOWN", "SKIPPED"].map((status) => `| ${status.replaceAll("_", " ")} | ${s[status]} |`).join("\n")}
+`;
+  if (report.baseline?.enabled) out += `
+New findings: ${s.newFindingCount}. Resolved findings: ${s.resolvedFindingCount}. Existing findings remain visible and do not affect the configured new-finding policy.
+`;
+  out += `
+## Configurations
+
+${report.configurations.length ? report.configurations.map((file) => `- \`${md(file).replaceAll("`", "\\`")}\``).join("\n") : "- No Shopify app configuration was found."}
+
+## Static findings
+`;
+  if (!report.findings.length) out += "\nNo findings were emitted by the supported static checks. This does not cover runtime or Partner Dashboard requirements.\n";
+  for (const f of report.findings) out += `
+### ${md(f.status)} \u2014 ${md(f.ruleId)}${f.lifecycle === "NEW" || f.lifecycle === "EXISTING" ? ` (${f.lifecycle})` : ""}
+
+${md(f.title)}
+
+${md(f.rationale)}
+
+- File: \`${md(f.file).replaceAll("`", "\\`")}${f.line ? `:${f.line}` : ""}\`
+- Review action: ${md(f.remediation)}
+- Evidence: ${f.evidence ? `[official reference](${f.evidence})` : "Not applicable"}
+`;
+  out += "\n## Submission checklist\n\n- [ ] Verify every `NEEDS_REVIEW` item in the deployed app and Partner Dashboard.\n- [ ] Confirm listing details, protected customer data status, and runtime behaviour with the app owner.\n- [ ] Re-run the checks after changing the selected configuration or app root.\n";
+  for (const f of report.findings.filter((item) => item.status === "NEEDS_REVIEW")) out += `- [ ] ${md(f.ruleId)}: ${md(f.title)}
+`;
+  if (report.resolvedFindings?.length) out += `
+## Resolved since baseline
+
+${report.resolvedFindings.map((f) => `- ${md(f.ruleId)} in \`${md(f.file)}\`: ${md(f.title)}`).join("\n")}
+`;
+  if (report.skipped.length) out += `
+## Skipped files
+
+${report.skipped.map((item) => `- \`${md(item.file)}\`: ${md(item.reason)}`).join("\n")}
+`;
+  return out;
+}
 function sarif(report) {
-  return { version: "2.1.0", $schema: "https://json.schemastore.org/sarif-2.1.0.json", runs: [{ tool: { driver: { name: "Shopify App Review Guard", version: report.toolVersion, informationUri: "https://github.com/RexCode-Digital/shopify-app-review-guard", rules: [...new Map(report.findings.map((f) => [f.ruleId, { id: f.ruleId, name: f.title, helpUri: f.evidence }])).values()] } }, results: report.findings.map((f) => ({ ruleId: f.ruleId, level: f.status === "FAIL" ? "error" : f.status === "WARN" ? "warning" : "note", message: { text: `${f.title} ${f.rationale}` }, locations: [{ physicalLocation: { artifactLocation: { uri: f.file.split("/").map(encodeURIComponent).join("/") }, ...f.line ? { region: { startLine: f.line } } : {} } }] })) }] };
+  return { version: "2.1.0", $schema: "https://json.schemastore.org/sarif-2.1.0.json", runs: [{ tool: { driver: { name: "Shopify App Review Guard", version: report.toolVersion, informationUri: "https://github.com/RexCode-Digital/shopify-app-review-guard", rules: [...new Map(report.findings.map((f) => [f.ruleId, { id: f.ruleId, name: f.title, helpUri: f.evidence }])).values()] } }, results: report.findings.map((f) => ({ ruleId: f.ruleId, level: f.status === "FAIL" ? "error" : f.status === "WARN" ? "warning" : "note", message: { text: `${f.title} ${f.rationale}` }, properties: { status: f.status, lifecycle: f.lifecycle, confidence: f.confidence, evidenceVersion: f.evidenceVersion }, locations: [{ physicalLocation: { artifactLocation: { uri: f.file.split("/").map(encodeURIComponent).join("/") }, ...f.line ? { region: { startLine: f.line } } : {} } }] })) }] };
 }
 
 // src/action.js
-import fs3 from "node:fs";
+import fs4 from "node:fs";
 import { randomUUID } from "node:crypto";
 var input = (name) => process.env[`INPUT_${name.toUpperCase().replaceAll("-", "_")}`];
 try {
   const format = input("format") || "human", threshold = input("fail-on") || "high";
   validateOptions(format, threshold);
   for (const name of ["strict", "show-unmapped"]) if (input(name) && !["true", "false"].includes(input(name))) throw new Error(`${name} must be true or false`);
-  const report = analyze(input("path") || ".", { config: input("config") || void 0, showUnmapped: input("show-unmapped") === "true" });
-  const output = format === "json" ? JSON.stringify(report, null, 2) : format === "sarif" ? JSON.stringify(sarif(report), null, 2) : human(report);
+  const report = analyze(input("path") || ".", { config: input("config") || void 0, baseline: input("baseline") || void 0, showUnmapped: input("show-unmapped") === "true" });
+  const output = format === "json" ? JSON.stringify(report, null, 2) : format === "sarif" ? JSON.stringify(sarif(report), null, 2) : format === "markdown" ? markdown(report) : human(report);
   const stop = randomUUID();
   console.log(`::stop-commands::${stop}
 ${output}
@@ -2290,14 +2557,14 @@ ${output}
   const set = (key, value) => {
     if (process.env.GITHUB_OUTPUT) {
       const delimiter = randomUUID();
-      fs3.appendFileSync(process.env.GITHUB_OUTPUT, `${key}<<${delimiter}
+      fs4.appendFileSync(process.env.GITHUB_OUTPUT, `${key}<<${delimiter}
 ${value}
 ${delimiter}
 `);
     }
   };
   const s = report.summary;
-  for (const [key, value] of Object.entries({ outcome: failed ? "failure" : "success", "finding-count": s.findingCount, "fail-count": s.FAIL, "warning-count": s.WARN, "review-count": s.NEEDS_REVIEW, "unknown-count": s.UNKNOWN, "rule-ids": [...new Set(report.findings.map((f) => f.ruleId))].join(","), report: output })) set(key, value);
+  for (const [key, value] of Object.entries({ outcome: failed ? "failure" : "success", "finding-count": s.findingCount, "new-finding-count": s.newFindingCount, "resolved-finding-count": s.resolvedFindingCount, "fail-count": s.FAIL, "warning-count": s.WARN, "review-count": s.NEEDS_REVIEW, "unknown-count": s.UNKNOWN, "rule-ids": [...new Set(report.findings.map((f) => f.ruleId))].join(","), report: output })) set(key, value);
   process.exitCode = failed ? 1 : 0;
 } catch (error) {
   console.error(`App Review Guard scanner error: ${String(error.message).replace(/[\r\n]/g, " ")}`);

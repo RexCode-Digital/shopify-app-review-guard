@@ -19,6 +19,7 @@ Part of the **RexCode Shopify developer tools** suite. Requires Node.js 20 or la
 
 ```bash
 npx shopify-app-review-guard check
+npx shopify-app-review-guard check --format markdown
 npx shopify-app-review-guard check --format json
 npx shopify-app-review-guard check --format sarif
 ```
@@ -51,13 +52,16 @@ Rules report deterministic signals with explicit confidence. Repository-wide heu
 
 - Shopify app configuration and production URL signals
 - `customers/data_request`, `customers/redact`, and `shop/redact` configuration
-- raw-body HMAC verification, timing-safe comparisons, and duplicate delivery handling
+- Shopify Events subscription fields, query version signals, HTTPS HMAC evidence, and cloud event destination review
+- route-associated raw-body HMAC verification, timing-safe comparisons, and duplicate delivery handling
 - embedded authentication and Admin API credential handling
 - latest App Bridge script evidence for embedded apps; missing visible markup is `NEEDS_REVIEW` because frameworks may inject the script at runtime
 - potential hardcoded credentials, environment files, and dynamic execution signals
 - protected customer-data and billing signals
 - lightweight listing manifest and manual-check tracking
-- JSON and SARIF 2.1.0 output with stable rule IDs
+- Markdown submission checklist plus JSON and SARIF 2.1.0 output with stable rule IDs
+- explicit app-root selection for monorepos so evidence from separate Shopify apps is not combined
+- optional baselines that keep existing findings visible while failing on new findings and reporting resolved items
 
 ## Related tools
 
@@ -66,6 +70,8 @@ This complements, rather than duplicates, the other RexCode tools:
 - [ChangeGuard](https://github.com/RexCode-Digital/shopify-app-changeguard) reviews meaningful configuration changes.
 - [Scope Guard](https://github.com/RexCode-Digital/shopify-scope-guard) audits declared access scopes against repository evidence.
 - [Upgrade Guard](https://github.com/RexCode-Digital/shopify-upgrade-guard) detects API and platform migration risks.
+
+See the [coordinated workflow example](https://github.com/RexCode-Digital/shopify-app-changeguard/blob/main/docs/ecosystem-workflow.md) to run all four published Actions in one pull-request workflow.
 
 GitHub Marketplace: [Shopify App Review Guard](https://github.com/marketplace/actions/shopify-app-review-guard)
 
@@ -79,13 +85,18 @@ A configuration mistake or missing compliance subscription can delay submission.
 npm install --save-dev shopify-app-review-guard
 npx shopify-app-review-guard check --path apps/my-app --config shopify.app.production.toml
 npx shopify-app-review-guard check --fail-on medium --strict
+npx shopify-app-review-guard check --format markdown --output submission-review.md
 npx shopify-app-review-guard check --format sarif --output review.sarif
+npx shopify-app-review-guard baseline create --path apps/my-app
+npx shopify-app-review-guard baseline check --path apps/my-app --format markdown
 npx shopify-app-review-guard --help
 ```
 
-`--config` selects a TOML file relative to `--path`. `--fail-on` accepts `none`, `low`, `medium`, or `high`; `--strict` includes `NEEDS_REVIEW` findings at that threshold. Unknown flags, malformed configuration, and invalid policies exit 2. TOML comments and strings in unrelated tables do not satisfy configured compliance subscriptions.
+`--config` selects a TOML file relative to `--path` and limits source scanning to that app's directory. Auto-discovery rejects multiple app roots; pass `--path` or `--config` to select one. `--fail-on` accepts `none`, `low`, `medium`, or `high`; `--strict` includes `NEEDS_REVIEW` findings at that threshold. A saved baseline keeps existing findings visible and only new findings affect the failure policy; use `baseline create` after reviewing the current results. Unknown flags, malformed configuration, and invalid policies exit 2. TOML comments and strings in unrelated tables do not satisfy configured compliance subscriptions.
 
-The Action supports `path`, `config`, `format`, `fail-on`, `strict`, and `show-unmapped`. Outputs are `outcome`, `finding-count`, `fail-count`, `warning-count`, `review-count`, `unknown-count`, `report`, and `rule-ids`. `report` is the rendered multiline report, usable as JSON when `format: json`. The bundled Action runs on Node 24 without installing dependencies in the consumer job.
+The Action supports `path`, `config`, `baseline`, `format`, `fail-on`, `strict`, and `show-unmapped`. Outputs are `outcome`, `finding-count`, `new-finding-count`, `resolved-finding-count`, `fail-count`, `warning-count`, `review-count`, `unknown-count`, `report`, and `rule-ids`. `report` is the rendered multiline report, usable as JSON when `format: json`. The bundled Action runs on Node 24 without installing dependencies in the consumer job.
+
+The Action example pins v0.1.5, which supports `human`, `json`, and `sarif`, but not Markdown or baselines. The Markdown and baseline CLI examples and the new baseline Action input/outputs above are part of the unreleased changes here; npm and Action v0.1.5 do not support them yet.
 
 ## Output and scan limits
 
@@ -95,7 +106,7 @@ Configuration checks parse TOML. Authentication, billing, data and webhook imple
 
 ## Listing manifest
 
-External listing and Partner Dashboard requirements cannot be proven from source. An optional `.app-review-guard.yml` records which items still need human verification. False or unspecified required values become `NEEDS_REVIEW`, never `FAIL`. A malformed manifest reports a warning and preserves all manual checks. Values set to `true` are your declaration of verification, not a scanner-certified pass.
+External listing and Partner Dashboard requirements cannot be proven from source. An optional `.app-review-guard.yml` records human declarations, but every listing item remains `NEEDS_REVIEW` because the scanner cannot verify the declaration or live dashboard state. A malformed manifest reports a warning and preserves all manual checks.
 
 ```yaml
 listing:
@@ -107,7 +118,7 @@ listing:
 
 ## Evidence and limitations
 
-Shopify-specific findings carry an official source URL and bundled evidence version. See [the evidence model](docs/evidence-model.md), [rule reference](docs/rule-reference.md), and [limitations](docs/limitations.md). Current source references include Shopify's [App Store requirements](https://shopify.dev/docs/apps/launch/shopify-app-store/app-store-requirements), [submission checklist](https://shopify.dev/docs/apps/launch/app-store-review/submit-app-for-review), [privacy requirements](https://shopify.dev/docs/apps/launch/privacy-requirements), [access tokens](https://shopify.dev/docs/apps/build/authentication-authorization/access-tokens), and [webhook verification](https://shopify.dev/docs/apps/build/webhooks/verify-deliveries).
+Shopify-specific findings carry an official source URL and bundled evidence version. See [the evidence model](docs/evidence-model.md), [rule reference](docs/rule-reference.md), and [limitations](docs/limitations.md). Current source references include Shopify's [App Store requirements](https://shopify.dev/docs/apps/launch/shopify-app-store/app-store-requirements), [submission checklist](https://shopify.dev/docs/apps/launch/app-store-review/submit-app-for-review), [privacy requirements](https://shopify.dev/docs/apps/launch/privacy-requirements), [Events subscriptions](https://shopify.dev/docs/apps/build/events/subscribe), [Events delivery structure](https://shopify.dev/docs/apps/build/events/delivery-structure), [access tokens](https://shopify.dev/docs/apps/build/authentication-authorization/access-tokens), and [webhook verification](https://shopify.dev/docs/apps/build/webhooks/verify-deliveries).
 
 The tool is a preflight assistant. It cannot guarantee App Store approval, prove live behaviour, inspect Partner Dashboard state, measure latency, or replace Shopify review, runtime testing, CodeQL, or legal advice.
 
