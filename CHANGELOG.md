@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.2.0
+
 - Review Shopify Events subscription fields and distinguish HTTPS HMAC requirements from EventBridge and Pub/Sub resource-policy checks.
 - Associate webhook authentication and duplicate-delivery signals with one configured route; ambiguous or cross-route evidence remains for manual review.
 - Reject ambiguous monorepo auto-discovery and scope explicit configuration scans to the selected app root.
