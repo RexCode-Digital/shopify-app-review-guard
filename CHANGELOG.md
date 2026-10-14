@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Review Shopify Events subscription fields and distinguish HTTPS HMAC requirements from EventBridge and Pub/Sub resource-policy checks.
+- Associate webhook authentication and duplicate-delivery signals with one configured route; ambiguous or cross-route evidence remains for manual review.
+- Reject ambiguous monorepo auto-discovery and scope explicit configuration scans to the selected app root.
+- Add Markdown submission checklists and finding baselines with new and resolved counts; listing declarations remain manual checks.
+- Add regression coverage for route isolation, Events-only configuration, monorepos, and baseline transitions.
+
 ## 0.1.5
 
 - Add a conservative App Bridge review finding when an embedded app has no statically visible official app-bridge.js integration evidence.

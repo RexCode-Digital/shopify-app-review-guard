@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { analyze } from '../src/analyzer.js';
+import { markdown, shouldFail } from '../src/output.js';
 const cli = path.resolve('src/cli.js'), action = path.resolve('dist/index.js');
 function fixture(t, config = 'application_url="https://example.test"\n') {
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'review-hardening-')); t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
@@ -26,9 +27,13 @@ test('URL parsing rejects substring localhost and IP bypasses',t=>{
  }
  assert.ok(!analyze(fixture(t,'application_url="http://[::1]:3000"\n')).findings.some(f=>f.ruleId==='AR-CONFIG-002'));
 });
+test('manifest declarations remain manual attestations',t=>{
+ const root=fixture(t); const file=path.join(root,'.app-review-guard.json');
+ fs.writeFileSync(file,JSON.stringify({listing:{privacyPolicyUrl:true,supportUrl:true,testInstructions:true,emergencyContact:true}}));const report=analyze(root);assert.equal(report.findings.filter(f=>f.ruleId.startsWith('AR-LISTING-')&&f.status==='NEEDS_REVIEW').length,4);assert.match(markdown(report),/cannot verify its accuracy or Partner Dashboard state/);
+});
 test('partial and invalid manifests retain unverified external checks',t=>{
  const root=fixture(t); const file=path.join(root,'.app-review-guard.json');
- fs.writeFileSync(file,JSON.stringify({listing:{supportUrl:true}}));assert.equal(analyze(root).findings.filter(f=>f.ruleId.startsWith('AR-LISTING-')).length,3);
+ fs.writeFileSync(file,JSON.stringify({listing:{supportUrl:true}}));assert.equal(analyze(root).findings.filter(f=>f.ruleId.startsWith('AR-LISTING-')&&f.status==='NEEDS_REVIEW').length,4);
  for(const value of [{}, {listing:{supportUrl:'true'}},null]){fs.writeFileSync(file,JSON.stringify(value));const r=analyze(root);assert.equal(r.findings.filter(f=>f.status==='NEEDS_REVIEW'&&f.ruleId.startsWith('AR-LISTING-')).length,4);assert.ok(r.findings.some(f=>f.ruleId==='AR-LISTING-001'));}
 });
 test('env variants are detected and oversized files reported',t=>{
@@ -52,6 +57,43 @@ test('bundled Action emits real multiline JSON and applies strict policy',t=>{
  const invalid=spawnSync(process.execPath,[action],{env:{...process.env,INPUT_PATH:root,INPUT_FAIL_ON:'typo'}});assert.equal(invalid.status,2);
 });
 
-test('documentation cannot stand in for runtime verification evidence',t=>{
- const root=fixture(t,'application_url="https://example.test"\nembedded=true\n[webhooks]\napi_version="2026-10"\n');fs.writeFileSync(path.join(root,'README.md'),'authenticate.webhook timingSafeEqual X-Shopify-Webhook-Id sessionToken');const ids=analyze(root).findings.map(f=>f.ruleId);assert.ok(ids.includes('AR-WEBHOOK-001'));assert.ok(ids.includes('AR-AUTH-001'));assert.ok(ids.includes('AR-WEBHOOK-004'));
+test('documentation cannot stand in for route-local verification evidence',t=>{
+ const root=fixture(t,'application_url="https://example.test"\nembedded=true\n[webhooks]\napi_version="2026-10"\n[[webhooks.subscriptions]]\nuri="/webhooks"\n');fs.writeFileSync(path.join(root,'README.md'),'authenticate.webhook timingSafeEqual X-Shopify-Webhook-Id sessionToken');const ids=analyze(root).findings.map(f=>f.ruleId);assert.ok(ids.includes('AR-WEBHOOK-001'));assert.ok(ids.includes('AR-AUTH-001'));assert.ok(ids.includes('AR-WEBHOOK-004'));
+});
+
+test('one verified webhook route does not cover a second configured route',t=>{
+ const root=fixture(t,'application_url="https://example.test"\n[webhooks]\n[[webhooks.subscriptions]]\nuri="/webhooks/secure"\n[[webhooks.subscriptions]]\nuri="/webhooks/unverified"\n');
+ fs.writeFileSync(path.join(root,'secure.js'),'app.post("/webhooks/secure", req => { const digest = crypto.createHmac("sha256", secret).update(req.rawBody).digest("base64"); crypto.timingSafeEqual(Buffer.from(req.headers["x-shopify-hmac-sha256"], "base64"), Buffer.from(digest, "base64")); });');
+ fs.writeFileSync(path.join(root,'unverified.js'),'app.post("/webhooks/unverified", handler);');
+ const findings=analyze(root).findings.filter(f=>f.ruleId==='AR-WEBHOOK-001');assert.equal(findings.filter(f=>f.status==='PASS').length,1);assert.equal(findings.filter(f=>f.status==='NEEDS_REVIEW').length,1);assert.ok(findings.some(f=>f.status==='NEEDS_REVIEW'&&f.file==='unverified.js'));
+});
+
+test('baseline reports new, existing, and resolved findings without hiding new high risks',t=>{
+ const root=fixture(t,'application_url="https://example.test"\n[webhooks]\napi_version="2026-10"\n');
+ fs.writeFileSync(path.join(root,'app.js'),'const customer = true;');
+ const create=spawnSync(process.execPath,[cli,'baseline','create','--path',root],{encoding:'utf8'});assert.equal(create.status,0,create.stderr);
+ let report=analyze(root);assert.ok(report.baseline.enabled);assert.ok(report.findings.filter(f=>f.lifecycle==='EXISTING').length>0);assert.equal(report.summary.newFindingCount,0);
+ fs.writeFileSync(path.join(root,'app.js'),'const ok = true;');report=analyze(root);assert.ok(report.resolvedFindings.some(f=>f.ruleId==='AR-DATA-001'));assert.equal(shouldFail(report,'high',true),false);
+ fs.writeFileSync(path.join(root,'shopify.app.toml'),'application_url="http://public.example"\n');report=analyze(root);assert.ok(report.findings.some(f=>f.ruleId==='AR-CONFIG-002'&&f.lifecycle==='NEW'));assert.equal(shouldFail(report,'high'),true);
+ const check=spawnSync(process.execPath,[cli,'baseline','check','--path',root,'--format','json'],{encoding:'utf8'});assert.equal(check.status,1);assert.ok(JSON.parse(check.stdout).summary.newFindingCount>0);
+});
+
+test('Events routes distinguish HTTPS HMAC checks from cloud event buses',t=>{
+ const https=fixture(t,'application_url="https://example.test"\n[events]\napi_version="2026-10"\n[[events.subscription]]\nhandle="products"\ntopic="Product"\nactions=["update"]\ntriggers=["product.title"]\nuri="https://example.test/events/products"\n');
+ fs.writeFileSync(path.join(https,'events.js'),'app.post("/events/products", handler);');
+ const httpsIds=analyze(https).findings.map(f=>f.ruleId);assert.ok(httpsIds.includes('AR-WEBHOOK-001'));assert.ok(httpsIds.includes('AR-WEBHOOK-004'));
+ const bus=fixture(t,'application_url="https://example.test"\n[events]\n[[events.subscription]]\nhandle="products"\ntopic="Product"\nactions=["create"]\nuri="arn:aws:events:us-east-1:123456789012:event-bus/shopify"\n');
+ const busFindings=analyze(bus).findings;assert.ok(busFindings.some(f=>f.ruleId==='AR-EVENTS-004'));assert.ok(!busFindings.some(f=>f.ruleId==='AR-WEBHOOK-001'));assert.ok(busFindings.some(f=>f.ruleId==='AR-WEBHOOK-004'));
+});
+
+test('Events update subscriptions require triggers and query filters require queries',t=>{
+ const root=fixture(t,'application_url="https://example.test"\n[events]\n[[events.subscription]]\nhandle="products"\ntopic="Product"\nactions=["update"]\nuri="https://example.test/events/products"\nquery_filter="product.status:ACTIVE"\n');
+ const findings=analyze(root).findings;assert.ok(findings.some(f=>f.ruleId==='AR-EVENTS-002'&&/triggers/.test(f.title)));assert.ok(findings.some(f=>f.ruleId==='AR-EVENTS-003'));
+});
+
+test('multiple Shopify app roots require an explicit selection and selected config scopes the scan',t=>{
+ const root=fixture(t);fs.rmSync(path.join(root,'shopify.app.toml'));
+ for(const app of ['apps/one','apps/two']){fs.mkdirSync(path.join(root,app),{recursive:true});fs.writeFileSync(path.join(root,app,'shopify.app.toml'),'application_url="https://example.test"\n');}
+ assert.throws(()=>analyze(root),/Multiple Shopify app roots/);
+ fs.writeFileSync(path.join(root,'apps/one','app.js'),'const customer = true;');const report=analyze(root,{config:'apps/two/shopify.app.toml'});assert.equal(report.root,path.join(root,'apps/two'));assert.equal(report.configurations.length,1);assert.ok(!report.findings.some(f=>f.ruleId==='AR-DATA-001'));
 });
