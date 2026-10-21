@@ -9,4 +9,4 @@ updates:
     groups:
       codeql-action:
         patterns:
-          - github/codeql-action*
+          - "github/codeql-action/*"
