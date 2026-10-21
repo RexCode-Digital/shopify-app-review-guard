@@ -1,10 +1,10 @@
 {
   "name": "shopify-app-review-guard",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Run offline Shopify App Store review-readiness checks against app configuration and repository evidence.",
   "type": "module",
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "bin": {
     "shopify-app-review-guard": "src/cli.js"
