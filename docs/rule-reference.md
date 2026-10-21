@@ -5,7 +5,7 @@
 | `AR-CONFIG-*` | Shopify configuration and deployment URL signals |
 | `AR-COMPLIANCE-*` | Mandatory compliance webhook configuration and handler review |
 | `AR-EVENTS-*` | Shopify Events subscription configuration and cloud delivery review |
-| `AR-WEBHOOK-*` | HMAC, raw-body, timing-safe comparison, and duplicate delivery review |
+| `AR-WEBHOOK-*` | Route-associated Shopify HMAC, raw-body, timing-safe comparison, and duplicate-delivery review for Express, React Router/Remix, Next.js App Router, and Next.js Pages API Routes |
 | `AR-AUTH-*` | Embedded authentication and credential safety |
 | `AR-APP-BRIDGE-001` | Visible latest App Bridge script evidence for embedded apps; missing static evidence is `NEEDS_REVIEW` because frameworks can inject scripts at runtime |
 | `AR-SECURITY-*` | Obvious secrets and dynamic execution review |

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Require Node.js 22 or newer for the CLI and test on Node.js 22 and 24; the GitHub Action continues to use Node 24.
+- Review Next.js App Router and Pages API webhook routes by configured path and POST handler, including route groups and dynamic segments. Pages API HMAC checks account for the default body parser and only recognise manual raw-body verification when parsing is disabled and the request stream is read in the route.
+- Keep ambiguous routes and untraced imported verification helpers at `NEEDS_REVIEW`; add synthetic positive and negative route fixtures.
+
 ## 0.2.0
 
 - Review Shopify Events subscription fields and distinguish HTTPS HMAC requirements from EventBridge and Pub/Sub resource-policy checks.

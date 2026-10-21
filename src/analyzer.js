@@ -123,7 +123,7 @@ export function analyze(root = '.', options = {}) {
     const classic = config.data.webhooks?.subscriptions ?? [];
     for (const subscription of classic) deliveryEndpoints.push({ uri: subscription.uri, kind: 'webhook', file: config.file, applicationUrl: config.data.application_url });
   }
-  findings.push(...reviewDeliveries({ files: code, endpoints: deliveryEndpoints, allSource: text }));
+  findings.push(...reviewDeliveries({ files: code, endpoints: deliveryEndpoints }));
   const embedded = parsedConfigs.some(c => c.data.embedded === true);
   if (embedded && !/session token|sessionToken|id_token|token.exchange|token-exchange|authenticate\./i.test(text)) findings.push(finding('AR-AUTH-001', 'high', 'NEEDS_REVIEW', 'Embedded authentication evidence is not evident', 'The app is configured as embedded but no recognizable session-token or token-exchange pattern was found.', 'Verify embedded requests with Shopify-supported authentication helpers and session tokens.', 'repository', undefined, 'medium', source.auth));
   if (embedded && !hasLatestAppBridgeScript(files)) findings.push(finding('AR-APP-BRIDGE-001', 'medium', 'NEEDS_REVIEW', 'Latest App Bridge script evidence is not visible', 'The app is configured as embedded, but no recognizable latest app-bridge.js script tag was found in scanned HTML or JSX. A framework may inject the script at runtime, which static analysis cannot determine.', 'Verify that the latest Shopify App Bridge script is loaded before other scripts in every embedded document.', 'repository', undefined, 'medium', source.appBridge));
