@@ -13,7 +13,7 @@ No Shopify credentials. No telemetry. No source upload. No repository code execu
 
 Maintained by RexCode Digital Ltd.
 
-Part of the **RexCode Shopify developer tools** suite. Requires Node.js 20 or later for the CLI. [Releases](https://github.com/RexCode-Digital/shopify-app-review-guard/releases) · [npm](https://www.npmjs.com/package/shopify-app-review-guard) · [Marketplace](https://github.com/marketplace/actions/shopify-app-review-guard)
+Part of the **RexCode Shopify developer tools** suite. Requires Node.js 22 or later for the CLI. [Releases](https://github.com/RexCode-Digital/shopify-app-review-guard/releases) · [npm](https://www.npmjs.com/package/shopify-app-review-guard) · [Marketplace](https://github.com/marketplace/actions/shopify-app-review-guard)
 
 ## Quick start
 
@@ -41,7 +41,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: RexCode-Digital/shopify-app-review-guard@14aa6c92d68c3f52ea06e8bb608328ce19f998d7 # v0.1.5
+      - uses: RexCode-Digital/shopify-app-review-guard@886a729183227ab742effcf7dfea32bbe9756e09 # v0.2.0
         with:
           fail-on: high
 ```
@@ -54,6 +54,7 @@ Rules report deterministic signals with explicit confidence. Repository-wide heu
 - `customers/data_request`, `customers/redact`, and `shop/redact` configuration
 - Shopify Events subscription fields, query version signals, HTTPS HMAC evidence, and cloud event destination review
 - route-associated raw-body HMAC verification, timing-safe comparisons, and duplicate delivery handling
+- Next.js App Router and Pages API webhook route mapping with POST-specific verifier evidence; see the [Next.js support matrix](docs/nextjs-support.md)
 - embedded authentication and Admin API credential handling
 - latest App Bridge script evidence for embedded apps; missing visible markup is `NEEDS_REVIEW` because frameworks may inject the script at runtime
 - potential hardcoded credentials, environment files, and dynamic execution signals
@@ -96,7 +97,7 @@ npx shopify-app-review-guard --help
 
 The Action supports `path`, `config`, `baseline`, `format`, `fail-on`, `strict`, and `show-unmapped`. Outputs are `outcome`, `finding-count`, `new-finding-count`, `resolved-finding-count`, `fail-count`, `warning-count`, `review-count`, `unknown-count`, `report`, and `rule-ids`. `report` is the rendered multiline report, usable as JSON when `format: json`. The bundled Action runs on Node 24 without installing dependencies in the consumer job.
 
-The Action example pins v0.1.5, which supports `human`, `json`, and `sarif`, but not Markdown or baselines. The Markdown and baseline CLI examples and the new baseline Action input/outputs above are part of the unreleased changes here; npm and Action v0.1.5 do not support them yet.
+The Action example pins the released v0.2.0 commit. This unreleased change adds Next.js route analysis; the pinned v0.2.0 CLI and Action do not include that feature yet.
 
 ## Output and scan limits
 
@@ -141,10 +142,10 @@ Report vulnerabilities privately using [SECURITY.md](SECURITY.md). Never include
 
 ## Immutable SHA usage
 
-The Action example pins the reviewed v0.1.5 release commit. Verify the release reference with:
+The Action example pins the reviewed v0.2.0 release commit. Verify the release reference with:
 
 ```bash
-git fetch --tags origin && git rev-parse 'v0.1.5^{commit}'
+git fetch --tags origin && git rev-parse 'v0.2.0^{commit}'
 ```
 
 Published patch tags are retained; existing minor aliases are movable. A reviewed full commit SHA is the immutable execution reference.

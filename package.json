@@ -4,7 +4,7 @@
   "description": "Run offline Shopify App Store review-readiness checks against app configuration and repository evidence.",
   "type": "module",
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "bin": {
     "shopify-app-review-guard": "src/cli.js"

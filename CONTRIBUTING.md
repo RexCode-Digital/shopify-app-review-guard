@@ -6,6 +6,6 @@ Contributions are welcome around official evidence references, privacy-safe fixt
 
 You retain copyright in your contributions. By submitting a contribution, you agree that it is provided under the same MIT licence that applies to this project. You confirm that you have the right to submit the contribution. Disclose any third-party code or assets and identify their applicable licences before including them.
 
-Use Node.js 20 or newer. Run `npm ci`, `npm test`, `npm run lint`, `npm run typecheck`, `npm run build`, `npm audit --omit=dev --audit-level=high`, and `git diff --check` before opening a pull request. Add a regression test for every rule change. Never add credentials, tokens, merchant data, or source-upload behaviour.
+Use Node.js 22 or newer. Run `npm ci`, `npm test`, `npm run lint`, `npm run typecheck`, `npm run build`, `npm audit --omit=dev --audit-level=high`, and `git diff --check` before opening a pull request. Add a regression test for every rule change. Never add credentials, tokens, merchant data, or source-upload behaviour.
 
 These repositories use a solo-maintainer review model. Keep changes in pull requests and merge only after the required automated checks pass. CODEOWNERS may route review requests, but human approval is not a merge requirement.
