@@ -2,8 +2,10 @@
 
 ## Unreleased
 
-- Require Node.js 22 or newer for the CLI and test on Node.js 22 and 24; the GitHub Action continues to use Node 24.
-- Review Next.js App Router and Pages API webhook routes by configured path and POST handler, including route groups and dynamic segments. Pages API HMAC checks account for the default body parser and only recognise manual raw-body verification when parsing is disabled and the request stream is read in the route.
+## 0.3.0
+
+- Breaking: require Node.js 22 or newer for the CLI; Node.js 20 is no longer supported. The Action remains on Node.js 24, and CI retains the required Node.js 20 check alongside Node.js 22 and 24.
+- Review Next.js App Router and Pages API webhook routes by configured path and POST handler, including route groups and dynamic segments. A HMAC pass requires route-local raw-body, Base64 SHA-256, matching header, and timing-safe comparison evidence; Pages API checks account for its default body parser.
 - Keep ambiguous routes and untraced imported verification helpers at `NEEDS_REVIEW`; add synthetic positive and negative route fixtures.
 
 ## 0.2.0
