@@ -13,7 +13,7 @@ App Router methods are checked separately. A `GET` handler cannot authenticate a
 
 ## Verification evidence
 
-For App Router manual HMAC checks, the scanner recognises route-local use of `request.text()` or `request.arrayBuffer()`, SHA-256 HMAC construction, the `X-Shopify-Hmac-Sha256` header, and `timingSafeEqual`.
+For App Router manual HMAC checks, the scanner requires route-local raw request bytes, a SHA-256 HMAC encoded as Base64, and a `timingSafeEqual` comparison that connects the computed digest to the `X-Shopify-Hmac-Sha256` header. The presence of these calls elsewhere in the handler is not enough.
 
 Next.js Pages API Routes enable body parsing by default. When a route attempts manual HMAC verification, the scanner reports `AR-WEBHOOK-002` unless the route exports `config.api.bodyParser = false`. It recognises manual raw-body evidence only when that setting is present and the route visibly reads the request stream. Parsed `req.body` is not accepted as the raw request body.
 

@@ -77,6 +77,66 @@ test('a Next.js POST route without an HMAC verifier remains for review', t => {
   webhookFinding(root, 'NEEDS_REVIEW');
 });
 
+test('manual HMAC evidence must compare the raw-body base64 digest with the Shopify header', t => {
+  const disconnected = fixture(t, { 'app/api/webhooks/route.ts': `import { createHmac, timingSafeEqual } from 'node:crypto';
+export async function POST(request: Request) {
+  const rawBody = await request.text();
+  const received = request.headers.get('x-shopify-hmac-sha256');
+  const digest = createHmac('sha256', secret).update(rawBody).digest('base64');
+  return timingSafeEqual(Buffer.from('fixed-a'), Buffer.from('fixed-b'));
+}` });
+  const disconnectedFindings = webhookFinding(disconnected, 'NEEDS_REVIEW');
+  assert.ok(!disconnectedFindings.some(finding => finding.status === 'PASS'));
+
+  const wrongEncoding = fixture(t, { 'app/api/webhooks/route.ts': `import { createHmac, timingSafeEqual } from 'node:crypto';
+export async function POST(request: Request) {
+  const rawBody = await request.text();
+  const received = request.headers.get('x-shopify-hmac-sha256');
+  const digest = createHmac('sha256', secret).update(rawBody).digest('hex');
+  return timingSafeEqual(Buffer.from(received), Buffer.from(digest));
+}` });
+  const wrongEncodingFindings = webhookFinding(wrongEncoding, 'NEEDS_REVIEW');
+  assert.ok(!wrongEncodingFindings.some(finding => finding.status === 'PASS'));
+
+  const alteredDigest = fixture(t, { 'app/api/webhooks/route.ts': `import { createHmac, timingSafeEqual } from 'node:crypto';
+export async function POST(request: Request) {
+  const rawBody = await request.text();
+  const received = request.headers.get('x-shopify-hmac-sha256');
+  const digest = createHmac('sha256', secret).update(rawBody).digest('base64');
+  return timingSafeEqual(Buffer.from(received), Buffer.from(digest + 'suffix'));
+}` });
+  assert.ok(!webhookFinding(alteredDigest, 'NEEDS_REVIEW').some(finding => finding.status === 'PASS'));
+
+  const mutableDigest = fixture(t, { 'app/api/webhooks/route.ts': `import { createHmac, timingSafeEqual } from 'node:crypto';
+export async function POST(request: Request) {
+  const rawBody = await request.text();
+  const received = request.headers.get('x-shopify-hmac-sha256');
+  let digest = createHmac('sha256', secret).update(rawBody).digest('base64');
+  digest = 'untrusted';
+  return timingSafeEqual(Buffer.from(received), Buffer.from(digest));
+}` });
+  assert.ok(!webhookFinding(mutableDigest, 'NEEDS_REVIEW').some(finding => finding.status === 'PASS'));
+
+  const preparedBuffers = fixture(t, { 'app/api/webhooks/route.ts': `import { createHmac, timingSafeEqual } from 'node:crypto';
+export async function POST(request: Request) {
+  const rawBody = await request.text();
+  const provided = request.headers.get('x-shopify-hmac-sha256');
+  const computed = createHmac('sha256', secret).update(rawBody).digest('base64');
+  const providedBuf = Buffer.from(provided, 'utf8');
+  const computedBuf = Buffer.from(computed, 'utf8');
+  return timingSafeEqual(providedBuf, computedBuf);
+}` });
+  assert.equal(webhookFinding(preparedBuffers, 'PASS').length, 1);
+});
+
+test('custom verifier names with dollar signs remain recognised for review', t => {
+  const root = fixture(t, { 'app/api/webhooks/route.ts': `export async function POST(request: Request) {
+  return verify$Custom(request);
+}` });
+  const findings = webhookFinding(root, 'NEEDS_REVIEW');
+  assert.ok(findings[0].rationale.includes('custom or imported verification helper'));
+});
+
 test('security examples inside strings and comments do not authenticate a route', t => {
   const root = fixture(t, { 'app/api/webhooks/route.ts': `export async function POST(request: Request) {
   // createHmac('sha256').update(rawBody); timingSafeEqual(signature, digest)
@@ -237,6 +297,18 @@ const shopify = shopifyApp({});
 export const authenticate = shopify.authenticate;`
   }, ['/webhooks']);
   assert.equal(webhookFinding(root, 'PASS').length, 1);
+});
+
+test('an unused Shopify server import does not authenticate an unrelated helper', t => {
+  const root = fixture(t, {
+    'app/api/webhooks/route.ts': `import { authenticate } from '../../shopify.server';
+export async function POST(request: Request) { return authenticate.webhook(request); }`,
+    'app/shopify.server.ts': `import { shopifyApp } from '@shopify/shopify-app-react-router/server';
+const shopify = {};
+export const authenticate = shopify.authenticate;`
+  });
+  const findings = webhookFinding(root, 'NEEDS_REVIEW');
+  assert.ok(!findings.some(finding => finding.status === 'PASS'));
 });
 
 test('an Express handler declared in the same module remains route-associated', t => {

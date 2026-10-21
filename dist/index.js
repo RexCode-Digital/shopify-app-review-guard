@@ -2616,15 +2616,179 @@ function expressHandlerSource(source2, syntax, match, open, close) {
   }
   return [registration, ...names].join("\n");
 }
+function expressionEnd(syntax, start) {
+  let parentheses = 0, brackets = 0, braces = 0;
+  for (let index = start; index < syntax.length; index++) {
+    const character = syntax[index];
+    if (character === ";" && parentheses === 0 && brackets === 0 && braces === 0) return index;
+    if (character === "\n" && parentheses === 0 && brackets === 0 && braces === 0) {
+      const next = skipSpace(syntax, index + 1);
+      if (syntax[next] !== ".") return index;
+    }
+    if (character === "}" && braces === 0 && parentheses === 0 && brackets === 0) return index;
+    if (character === "(") parentheses++;
+    else if (character === ")" && parentheses > 0) parentheses--;
+    else if (character === "[") brackets++;
+    else if (character === "]" && brackets > 0) brackets--;
+    else if (character === "{") braces++;
+    else if (character === "}" && braces > 0) braces--;
+  }
+  return syntax.length;
+}
+function callArgumentRanges(syntax, open) {
+  const close = matchingDelimiter(syntax, open, "(", ")");
+  if (close < 0) return [];
+  const ranges = [];
+  let start = open + 1, parentheses = 0, brackets = 0, braces = 0;
+  for (let index = open + 1; index < close; index++) {
+    const character = syntax[index];
+    if (character === "," && parentheses === 0 && brackets === 0 && braces === 0) {
+      ranges.push({ start, end: index });
+      start = index + 1;
+      continue;
+    }
+    if (character === "(") parentheses++;
+    else if (character === ")" && parentheses > 0) parentheses--;
+    else if (character === "[") brackets++;
+    else if (character === "]" && brackets > 0) brackets--;
+    else if (character === "{") braces++;
+    else if (character === "}" && braces > 0) braces--;
+  }
+  if (start < close || ranges.length) ranges.push({ start, end: close });
+  return ranges;
+}
+function hmacHeaderVariables(handler, syntax) {
+  const names = /* @__PURE__ */ new Set();
+  const patterns = [
+    /\bconst\s+([A-Za-z_$][\w$]*)\s*=\s*(?:(?:request|req)\s*\.\s*)?headers\s*\.\s*get\s*\(/gi,
+    /\bconst\s+([A-Za-z_$][\w$]*)\s*=\s*(?:(?:request|req)\s*\.\s*)?headers\s*\[/gi
+  ];
+  for (const pattern of patterns) for (const match of syntax.matchAll(pattern)) {
+    const openCharacter = /get\s*\($/i.test(match[0]) ? "(" : "[";
+    const open = syntax.lastIndexOf(openCharacter, match.index + match[0].length - 1);
+    const close = matchingDelimiter(syntax, open, openCharacter, openCharacter === "(" ? ")" : "]");
+    if (close >= 0 && /^\s*(['"])x-shopify-hmac-sha256\1\s*$/i.test(handler.slice(open + 1, close))) names.add(match[1]);
+  }
+  return names;
+}
+function rawBodyUpdate(update, framework, requestBodyVariables, namedUpdateVariables, expressRawParser, pagesRawBodyReady) {
+  const value = update.trim();
+  if (/^await\s+(?:request|req)\s*\.\s*(?:text|arrayBuffer)\s*\(/i.test(value) || /\b(?:request|req)\s*\.\s*(?:rawBody|rawRequestBody)\b/i.test(value)) return true;
+  if (/^Buffer\s*\.\s*concat\s*\(/i.test(value)) return framework === "next-pages-router" && pagesRawBodyReady;
+  if (/^(?:req|request)\s*\.\s*body$/i.test(value) && framework === "express" && expressRawParser) return true;
+  const identifier = value.match(/^([A-Za-z_$][\w$]*)$/)?.[1];
+  if (!identifier) return false;
+  return requestBodyVariables.has(identifier) || framework === "next-pages-router" && pagesRawBodyReady && namedUpdateVariables.has(identifier) || framework === "express" && (expressRawParser || namedUpdateVariables.has(identifier)) && namedUpdateVariables.has(identifier);
+}
+function computedHmacVariables(handler, syntax, framework, requestBodyVariables, namedUpdateVariables, expressRawParser, pagesRawBodyReady) {
+  const names = /* @__PURE__ */ new Set();
+  for (const match of syntax.matchAll(/\bconst\s+([A-Za-z_$][\w$]*)\s*=\s*(?:crypto\s*\.\s*)?createHmac\s*\(/g)) {
+    const open = syntax.indexOf("(", match.index + match[0].lastIndexOf("("));
+    const close = matchingDelimiter(syntax, open, "(", ")");
+    if (close < 0 || !/^\s*(['"])sha256\1\s*,/i.test(handler.slice(open + 1, close))) continue;
+    const end = expressionEnd(syntax, close + 1);
+    const chain = syntax.slice(close + 1, end);
+    const updateCalls = [...chain.matchAll(/\.\s*update\s*\(/g)];
+    for (const updateMatch of updateCalls) {
+      const updateOpen = chain.indexOf("(", updateMatch.index + updateMatch[0].lastIndexOf("("));
+      const updateClose = matchingDelimiter(chain, updateOpen, "(", ")");
+      if (updateClose < 0) continue;
+      const updateStart = close + 1 + updateOpen + 1;
+      const updateEnd = close + 1 + updateClose;
+      if (!rawBodyUpdate(handler.slice(updateStart, updateEnd), framework, requestBodyVariables, namedUpdateVariables, expressRawParser, pagesRawBodyReady)) continue;
+      const digestTail = chain.slice(updateClose + 1);
+      for (const digestMatch of digestTail.matchAll(/\.\s*digest\s*\(/g)) {
+        const digestOpen = digestTail.indexOf("(", digestMatch.index + digestMatch[0].lastIndexOf("("));
+        const digestClose = matchingDelimiter(digestTail, digestOpen, "(", ")");
+        if (digestClose < 0) continue;
+        const digestStart = close + 1 + updateClose + 1 + digestOpen + 1;
+        const digestEnd = close + 1 + updateClose + 1 + digestClose;
+        if (/^\s*(['"])base64\1\s*$/i.test(handler.slice(digestStart, digestEnd))) names.add(match[1]);
+      }
+    }
+  }
+  return names;
+}
+function bufferAliases(names, syntax) {
+  const aliases = new Set(names), buffers = /* @__PURE__ */ new Set();
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const match of syntax.matchAll(/\bconst\s+([A-Za-z_$][\w$]*)\s*=\s*Buffer\s*\.\s*from\s*\(/g)) {
+      const open = syntax.indexOf("(", match.index + match[0].lastIndexOf("("));
+      const args = callArgumentRanges(syntax, open);
+      if (!args.length) continue;
+      const first = syntax.slice(args[0].start, args[0].end).trim();
+      if (/^[A-Za-z_$][\w$]*$/.test(first) && aliases.has(first) && !aliases.has(match[1])) {
+        aliases.add(match[1]);
+        buffers.add(match[1]);
+        changed = true;
+      }
+    }
+  }
+  return buffers;
+}
+function timingSafeComparisonUsesShopifyHmac(handler, syntax, headerVariables, digestVariables) {
+  const headerBuffers = bufferAliases(headerVariables, syntax);
+  const digestBuffers = bufferAliases(digestVariables, syntax);
+  const unwrap = (value) => {
+    let expression = value.trim(), changed = true;
+    while (changed && expression.startsWith("(") && expression.endsWith(")")) {
+      changed = matchingDelimiter(expression, 0, "(", ")") === expression.length - 1;
+      if (changed) expression = expression.slice(1, -1).trim();
+    }
+    return expression;
+  };
+  const headerCall = /^(?:(?:request|req)\s*\.\s*)?headers\s*(?:\.\s*get\s*\(\s*(['"])x-shopify-hmac-sha256\1\s*\)|\[\s*(['"])x-shopify-hmac-sha256\2\s*\])$/i;
+  const usesBuffer = (range, variables, buffers, directHeader) => {
+    const expression = unwrap(handler.slice(range.start, range.end));
+    if (/^[A-Za-z_$][\w$]*$/.test(expression)) return buffers.has(expression);
+    const expressionSyntax = unwrap(syntax.slice(range.start, range.end));
+    const call = expressionSyntax.match(/^Buffer\s*\.\s*from\s*\(/);
+    if (!call) return false;
+    const open = expressionSyntax.indexOf("("), args = callArgumentRanges(expressionSyntax, open);
+    if (!args.length) return false;
+    const value = unwrap(expression.slice(args[0].start, args[0].end));
+    return variables.has(value) || directHeader && headerCall.test(value);
+  };
+  for (const match of syntax.matchAll(/\btimingSafeEqual\s*\(/g)) {
+    const open = syntax.indexOf("(", match.index + match[0].lastIndexOf("("));
+    const args = callArgumentRanges(syntax, open);
+    if (args.length !== 2) continue;
+    const headerAt = (range) => usesBuffer(range, headerVariables, headerBuffers, true);
+    const digestAt = (range) => usesBuffer(range, digestVariables, digestBuffers, false);
+    if (headerAt(args[0]) && digestAt(args[1]) || headerAt(args[1]) && digestAt(args[0])) return true;
+  }
+  return false;
+}
+function hasShopifyAuthenticator(source2) {
+  const cleaned = maskComments(source2), syntax = maskStrings(cleaned);
+  const importPattern = /\bimport\s*\{([^}]+)\}\s*from\s*(['"])(@shopify\/shopify-app-(?:react-router|remix)\/server)\2/g;
+  let creator = null;
+  for (const match of cleaned.matchAll(importPattern)) {
+    const imported = match[1].match(/\bshopifyApp\b(?:\s+as\s+([A-Za-z_$][\w$]*))?/);
+    if (imported) {
+      creator = imported[1] ?? "shopifyApp";
+      break;
+    }
+  }
+  if (!creator) return false;
+  const appInstances = new Set([...syntax.matchAll(new RegExp(`\\b(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*${creator}\\s*\\(`, "g"))].map((match) => match[1]));
+  for (const match of syntax.matchAll(/\b(?:export\s+)?(?:const|let|var)\s+authenticate\s*=\s*([A-Za-z_$][\w$]*)\s*\.\s*authenticate\b/g)) {
+    if (!appInstances.has(match[1])) continue;
+    if (/\bexport\s+(?:const|let|var)\s+authenticate\b/.test(syntax) || /\bexport\s*\{[^}]*\bauthenticate\b/.test(syntax)) return true;
+  }
+  return false;
+}
 function routeAuth(route, files) {
   const handler = route.handlerSource ?? "", moduleSource = route.moduleSource ?? route.source ?? "";
   const handlerSyntax = maskStrings(handler);
   const relatedModules = [moduleSource, ...localImports(route, files)];
   const hasPackage = (source2, packagePattern) => importSpecifiers(source2).some((specifier) => packagePattern.test(specifier));
-  const reactRouter = /\bauthenticate\s*\.\s*webhook\s*\(/.test(handlerSyntax) && relatedModules.some((source2) => hasPackage(source2, /^@shopify\/shopify-app-(?:react-router|remix)\/server$/) && /\bexport\s+(?:const|let|var|function)\s+authenticate\b|\bexport\s*\{[^}]*\bauthenticate\b/.test(source2));
+  const reactRouter = /\bauthenticate\s*\.\s*webhook\s*\(/.test(handlerSyntax) && relatedModules.some((source2) => hasPackage(source2, /^@shopify\/shopify-app-(?:react-router|remix)\/server$/) && hasShopifyAuthenticator(source2));
   const apiLibraryCall = /\b(?:shopify\s*\.\s*)?webhooks\s*\.\s*validate\s*\(/.test(handlerSyntax) && relatedModules.some((source2) => hasPackage(source2, /^@shopify\/shopify-api(?:\/.*)?$/));
   const requestBodyVariables = /* @__PURE__ */ new Set();
-  for (const match of handlerSyntax.matchAll(/\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*await\s+(?:request|req)\.(?:text|arrayBuffer)\s*\(/g)) requestBodyVariables.add(match[1]);
+  for (const match of handlerSyntax.matchAll(/\bconst\s+([A-Za-z_$][\w$]*)\s*=\s*await\s+(?:request|req)\.(?:text|arrayBuffer)\s*\(/g)) requestBodyVariables.add(match[1]);
   const namedUpdate = [...handlerSyntax.matchAll(/\.update\s*\(\s*(rawBody|rawRequestBody|bodyBuffer|rawBuffer)\s*\)/ig)];
   const expressPrelude = route.framework === "express" && route.registrationOffset !== void 0 ? moduleSource.slice(0, route.registrationOffset) : "";
   const expressRawParser = route.framework === "express" && /express\.(?:raw|text)\s*\(/.test(`${expressPrelude}
@@ -2646,12 +2810,16 @@ ${handler}`);
     const open = handlerSyntax.indexOf("(", match.index);
     return /^\s*(['"])sha256\1/i.test(handler.slice(open + 1));
   });
-  const hmac = hasHeader && sha256Hmac && rawBodyInput && /\btimingSafeEqual\s*\(/i.test(handlerSyntax);
+  const namedUpdateVariables = new Set(namedUpdate.map((match) => match[1]));
+  const pagesRawBodyReady = route.framework === "next-pages-router" && pagesRawBodyInput(handler);
+  const digestVariables = computedHmacVariables(handler, handlerSyntax, route.framework, requestBodyVariables, namedUpdateVariables, expressRawParser, pagesRawBodyReady);
+  const headerVariables = hmacHeaderVariables(handler, handlerSyntax);
+  const hmac = hasHeader && rawBodyInput && digestVariables.size > 0 && timingSafeComparisonUsesShopifyHmac(handler, handlerSyntax, headerVariables, digestVariables);
   const usesParsedBody = /\.update\s*\(\s*(?:req|request)\.body\s*\)/i.test(handlerSyntax) || /\brawBody\s*:\s*(?:req|request)\.body\b/i.test(handlerSyntax);
   const parsedBodyInput = usesParsedBody && !(route.framework === "express" && expressRawParser);
   const library = apiLibraryCall && (rawBodyArgument || route.framework === "express" && !parsedBodyInput);
   const verified = (reactRouter || library || hmac) && pageRawBodyConfig(route) && !parsedBodyInput;
-  const helperCall = /\b(?:verify|validate|authenticate|check|assert)[A-Z_$\w]*\s*\(/i.test(handlerSyntax) || /\b(?:shopify\s*\.\s*)?webhooks\s*\.\s*validate\s*\(/.test(handlerSyntax) || /\bauthenticate\s*\.\s*webhook\s*\(/.test(handlerSyntax);
+  const helperCall = /\b(?:verify|validate|authenticate|check|assert)[\w$]*\s*\(/i.test(handlerSyntax) || /\b(?:shopify\s*\.\s*)?webhooks\s*\.\s*validate\s*\(/.test(handlerSyntax) || /\bauthenticate\s*\.\s*webhook\s*\(/.test(handlerSyntax);
   const verificationAttempt = hasHeader || sha256Hmac || helperCall;
   return { verified, helperCall, verificationAttempt, parsedBodyInput, rawBodyAttempt: hasHeader && sha256Hmac };
 }
