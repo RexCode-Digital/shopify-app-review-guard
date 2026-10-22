@@ -25,7 +25,7 @@ The scanner recognises the default `.js`, `.jsx`, `.ts`, and `.tsx` extensions. 
 
 ## GitHub Action
 
-The current released Action can be pinned to the immutable v0.2.0 commit:
+The current released Action can be pinned to the immutable v0.3.0 commit:
 
 ```yaml
 name: Shopify App Review Guard
@@ -40,13 +40,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: RexCode-Digital/shopify-app-review-guard@886a729183227ab742effcf7dfea32bbe9756e09 # v0.2.0
+      - uses: RexCode-Digital/shopify-app-review-guard@83498086f93ccceaeec938003f3167b905fedbe5 # v0.3.0
         with:
           path: .
           fail-on: high
 ```
 
-The pinned v0.2.0 Action does not include the Next.js support in this unreleased change. Next.js checks become available in an Action release that contains this implementation. The Action runs on Node.js 24 and only needs `contents: read`.
+The v0.3.0 release includes the Next.js checks. The Action runs on Node.js 24 and the example only needs `contents: read`.
+
+Verify the immutable reference with `git fetch --tags origin && git rev-parse 'v0.3.0^{commit}'`.
 
 ## References
 
