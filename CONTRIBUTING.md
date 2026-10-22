@@ -1,11 +1,26 @@
-# Contributing
+# Contributing to Shopify App Review Guard
 
-Contributions are welcome around official evidence references, privacy-safe fixtures, supported Node/TypeScript framework patterns, false-positive reduction, and output stability.
+Contributions are welcome around official evidence references, conservative App Router and Pages Router mapping, webhook verification patterns, privacy-safe fixtures, and stable output.
 
-## Contribution terms
+This project is MIT licensed. You retain copyright in your contributions and confirm you have the right to submit them. Identify third-party code and assets with their applicable licences.
 
-You retain copyright in your contributions. By submitting a contribution, you agree that it is provided under the same MIT licence that applies to this project. You confirm that you have the right to submit the contribution. Disclose any third-party code or assets and identify their applicable licences before including them.
+Use Node.js 22 or newer. Install the locked dependencies and run the relevant checks before opening a pull request:
 
-Use Node.js 22 or newer. Run `npm ci`, `npm test`, `npm run lint`, `npm run typecheck`, `npm run build`, `npm audit --omit=dev --audit-level=high`, and `git diff --check` before opening a pull request. Add a regression test for every rule change. Never add credentials, tokens, merchant data, or source-upload behaviour.
+```sh
+npm ci
+npm test
+npm run coverage
+npm run lint
+npm run typecheck
+npm run build
+npm run package:smoke
+npm run action:check
+npm audit --omit=dev --audit-level=high
+git diff --check
+```
 
-These repositories use a solo-maintainer review model. Keep changes in pull requests and merge only after the required automated checks pass. CODEOWNERS may route review requests, but human approval is not a merge requirement.
+Add a regression test for each behaviour change. Keep fixtures synthetic and sanitised. Link current official Shopify evidence for Shopify-specific rules or mappings, and include a negative case where static detection could otherwise produce a false positive. Keep output deterministic and preserve the product's uncertainty and privacy boundaries.
+
+The project follows a solo-maintainer review model. Use a focused pull request and record the checks actually run. Human approval is not a branch-protection requirement; automated checks remain required. Contributors are responsible for reviewing and understanding submitted changes.
+
+Read the shared [RexCode Open Source standards](https://github.com/RexCode-Digital/.github/blob/main/docs/oss/standards.md). For security reports, use [SECURITY.md](SECURITY.md); for safe usage questions, use [SUPPORT.md](SUPPORT.md).

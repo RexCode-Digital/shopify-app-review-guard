@@ -22,7 +22,7 @@
   ],
   "scripts": {
     "test": "node --test",
-    "coverage": "c8 --include 'src/**' --reporter=text --reporter=json-summary node --test",
+    "coverage": "c8 --include 'src/**' --reporter=text --reporter=json-summary --check-coverage --lines 85 --statements 85 --functions 90 --branches 70 node --test",
     "lint": "node scripts/check-source.mjs",
     "typecheck": "node --check src/analyzer.js",
     "build": "node scripts/build-action.mjs",
