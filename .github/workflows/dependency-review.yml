@@ -6,4 +6,4 @@ jobs:
   dependency-review:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/dependency-review-action@2f920dad77d7f4f2ea876b66287b896de40dda79 # v4
+      - uses: actions/dependency-review-action@907a6e9569212033966bc0b69d32473b046dd66b # v4
