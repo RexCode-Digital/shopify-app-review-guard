@@ -9,7 +9,7 @@ inputs:
   config: { description: Shopify app TOML path relative to the scan root, required: false }
   baseline: { description: Optional baseline path relative to the selected app root, required: false }
   fail-on: { description: Minimum severity that fails the job, required: false, default: high }
-  format: { description: human, markdown, json, or sarif, required: false, default: human }
+  format: { description: 'Output format: human, markdown, json, or sarif', required: false, default: human }
   strict: { description: Treat review findings at the threshold as failures, required: false, default: 'false' }
   show-unmapped: { description: Include unknown Shopify patterns, required: false, default: 'false' }
 outputs:
